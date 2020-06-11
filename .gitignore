@@ -145,6 +145,7 @@ __pycache__/
 
 # C extensions
 *.so
+*.h
 
 # Distribution / packaging
 .Python
