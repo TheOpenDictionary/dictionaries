@@ -1,7 +1,3 @@
-
-# Created by https://www.toptal.com/developers/gitignore/api/osx,windows,linux,python,pycharm
-# Edit at https://www.toptal.com/developers/gitignore?templates=osx,windows,linux,python,pycharm
-
 ### Linux ###
 *~
 
@@ -300,7 +296,3 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
-
-
-dictionaries
-# End of https://www.toptal.com/developers/gitignore/api/osx,windows,linux,python,pycharm
