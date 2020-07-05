@@ -1,0 +1,23 @@
+load("@rules_python//python:defs.bzl", "py_binary")
+load("@deps//:requirements.bzl", "requirement")
+
+py_binary(
+    name = "main-bin",
+    srcs = glob(["*.py"]),
+    main = "main.py",
+    deps = [
+        requirement("beautifulsoup4"),
+        requirement("urllib3"),
+        requirement("requests"),
+        requirement("certifi"),
+        requirement("chardet"),
+        requirement("idna"),
+        requirement("lxml"),
+        requirement("soupsieve"),
+    ],
+)
+
+alias(
+    name = "main",
+    actual = "//:main-bin",
+)

@@ -1,7 +1,7 @@
-# ODict <> FreeDict Converter 
+# ODict <> FreeDict Converter
 
 This repo contains a tiny Python 3 script for converting the latest [FreeDict](https://freedict.org) dictionaries to the
-ODict format. 
+ODict format.
 
 To run in an isolated Python 3 virtual environment, simply run:
 
@@ -9,8 +9,13 @@ To run in an isolated Python 3 virtual environment, simply run:
 $ python3 -m venv .venv
 $ source .venv/bin/activate
 $ pip install -r requirements.txt
-$ python3 setup.py
 $ python3 main.py
+```
+
+or run using [Bazel](https://bazel.build) by running:
+
+```
+$ bazel run main
 ```
 
 The compiled dictionaries are available under `./dictionaries`.
