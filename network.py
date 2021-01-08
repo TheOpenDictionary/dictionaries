@@ -54,6 +54,11 @@ def __list_files(url, regex):
 
     return file_urls
 
+def try_version(x):
+  try:
+    return StrictVersion(x[0].replace('-', '.'))
+  except (ValueError, TypeError):
+    return StrictVersion('0.0')
 
 def get_files(on_each):
     with TemporaryDirectory() as dirpath:
@@ -78,7 +83,7 @@ def get_files(on_each):
             latest_version_url = sorted(
                 language_level.items(),
                 reverse=True,
-                key=lambda x: StrictVersion(x[0].replace('-', '.'))
+                key=lambda x: try_version(x)
             )[0][1]
 
             version_level = __list_files(

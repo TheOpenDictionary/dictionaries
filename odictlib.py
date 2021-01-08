@@ -4,9 +4,9 @@ from ctypes import *
 from bs4 import BeautifulSoup
 from os import path
 
-odict_version = 1.0
+odict_version = 1.2
 
-base_url = "https://github.com/odict/odict/releases/download/v%s" % odict_version
+base_url = "https://github.com/odict/odict/releases/download/%s" % odict_version
 base_local = path.dirname(__file__)
 so_path = path.join(base_local, 'odict.so')
 h_path = path.join(base_local, 'odict.h')
