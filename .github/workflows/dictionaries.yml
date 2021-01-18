@@ -1,0 +1,32 @@
+name: Generate Dictionaries
+
+on: workflow_dispatch
+
+env:
+  GO_VERSION: "^1.14.4"
+  JAVA_VERSION: 11
+
+jobs:
+  create:
+    name: Generate Dictionaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Setup Bazelisk
+        run: |
+          go get github.com/bazelbuild/bazelisk
+          export PATH=$PATH:$(go env GOPATH)/bin
+
+      - name: Run program
+        run: bazelisk run main
+
+      - name: Copy files
+        run: cp -r bazel-bin/main-bin.runfiles/__main__/dictionaries .
+
+      - name: Add and commit to repo
+        uses: EndBug/add-and-commit@v7
+        with:
+          add: "dictionaries"
+          push: true

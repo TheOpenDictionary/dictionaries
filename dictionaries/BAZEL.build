@@ -1,4 +1,0 @@
-filegroup(
-    name = "dictionaries",
-    srcs = glob(["*.odict"]),
-)

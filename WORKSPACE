@@ -1,4 +1,4 @@
-load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file")
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 http_archive(
     name = "rules_python",
@@ -24,14 +24,17 @@ load("@deps//:requirements.bzl", "pip_install")
 
 pip_install()
 
-# load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
-
-http_file(
-    name = "odict_so",
-    urls = ["https://github.com/odict/odict/releases/download/v1.0/odict.so"],
+http_archive(
+    name = "odict",
+    sha256 = "81bab611bcf93b6b8baac2e11fa6a5aa7ca907509bd5ad654fe58c2bfcafac1d",
+    strip_prefix = "odict-1.4",
+    url = "https://github.com/TheOpenDictionary/odict/archive/1.4/odict-1.4.tar.gz",
 )
 
-http_file(
-    name = "odict_h",
-    urls = ["https://github.com/odict/odict/releases/download/v1.0/odict.h"],
-)
+load("@odict//bazel:odict_deps.bzl", "odict_deps")
+
+odict_deps()
+
+load("@odict//bazel:odict_extra_deps.bzl", "odict_extra_deps")
+
+odict_extra_deps()
