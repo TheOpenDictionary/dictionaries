@@ -23,20 +23,23 @@ for j in json:
                 url = release["URL"]
 
                 with TemporaryDirectory() as dirpath:
-                    print("\nProcessing dictionary: %s..." % url)
+                    try:
+                        print("\nProcessing dictionary: %s..." % url)
 
-                    file_name = url.split('/')[-1]
-                    blob = requests.get(url).content
-                    output_path = path.join(dirpath, file_name)
+                        file_name = url.split('/')[-1]
+                        blob = requests.get(url).content
+                        output_path = path.join(dirpath, file_name)
 
-                    new_file = open(output_path, 'w+b')
-                    new_file.write(blob)
-                    new_file.close()
+                        new_file = open(output_path, 'w+b')
+                        new_file.write(blob)
+                        new_file.close()
 
-                    content = read_tei_archive(output_path)
-                    dictionary = tei_to_odxml(content)
-                    dict_path = "dictionaries/%s.odict" % language_pair
+                        content = read_tei_archive(output_path)
+                        dictionary = tei_to_odxml(content)
+                        dict_path = "dictionaries/%s.odict" % language_pair
 
-                    print("Writing to \"%s\"..." % dict_path)
+                        print("Writing to \"%s\"..." % dict_path)
 
-                    Dictionary.write(dictionary, dict_path)
+                        Dictionary.write(dictionary, dict_path)
+                    except Exception as e:
+                        print(e)

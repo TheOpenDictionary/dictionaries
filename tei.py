@@ -7,7 +7,7 @@ from xml.sax.saxutils import escape
 def tei_to_odxml(tei_doc):
     soup = BeautifulSoup(tei_doc, 'lxml')
     entries = soup.body.findAll('entry')
-    od_dictionary = "<dictionary>"
+    od_dictionary = "<dictionary name=\"FreeDict\">"
 
     for entry in entries:
         term = entry.orth.getText()
