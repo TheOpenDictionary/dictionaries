@@ -1,44 +1,48 @@
 import tarfile
+import xml.etree.ElementTree as ET
 
 from bs4 import BeautifulSoup
-from xml.sax.saxutils import escape
 
 
 def tei_to_odxml(tei_doc):
-    soup = BeautifulSoup(tei_doc, 'lxml')
-    entries = soup.body.findAll('entry')
-    od_dictionary = "<dictionary name=\"FreeDict\">"
+    document = BeautifulSoup(tei_doc, 'lxml')
+    entries = document.body.findAll('entry')
+    root = ET.Element("dictionary", attrib={'name': 'FreeDict'})
 
     for entry in entries:
         term = entry.orth.getText()
+        entry_attr = {'term': term}
 
         print("Processing word \"%s\"..." % term)
 
-        # pronunciation = entry.pron.getText()
-        od_entry = "<entry term=\"%s\"><ety>" % escape(term)
+        if entry.pron is not None:
+            entry_attr['pronunciation'] = entry.pron.getText()
+
+        entry_node = ET.Element("entry", attrib=entry_attr)
+        ety_node = ET.Element("ety")
         senses = entry.findAll('sense')
 
         for sense in senses:
-            od_usage = "<usage>"
+            usage_node = ET.Element("usage")
             citations = sense.findAll('cit')
 
             for cit in citations:
-                od_usage += "<definition>%s</definition>" % escape(
-                    cit.getText().strip())
+                def_node = ET.Element("definition")
 
-            od_usage += "</usage>"
+                def_node.text = cit.getText().strip()
 
-            if len(citations) > 0:
-                od_entry += od_usage
+                usage_node.append(def_node)
 
-        od_entry += "</ety></entry>"
+                if len(citations) > 0:
+                    entry_node.append(usage_node)
 
-        if len(senses) > 0:
-            od_dictionary += od_entry
+            ety_node.append(usage_node)
+            entry_node.append(ety_node)
 
-    od_dictionary += "</dictionary>"
+            if len(senses) > 0:
+                root.append(entry_node)
 
-    return od_dictionary
+    return ET.tostring(root).decode('utf-8')
 
 
 def read_tei_archive(path):

@@ -5,7 +5,6 @@ from os import path
 from pathlib import Path
 from python.odict import Dictionary
 from ctypes import *
-from bs4 import BeautifulSoup
 from os import path
 from tempfile import TemporaryDirectory
 from tei import tei_to_odxml, read_tei_archive

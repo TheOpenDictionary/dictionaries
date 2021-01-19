@@ -7,14 +7,9 @@ py_binary(
     data = ["@odict//bridge:shared"],
     main = "main.py",
     deps = [
-        requirement("beautifulsoup4"),
-        requirement("urllib3"),
         requirement("requests"),
-        requirement("certifi"),
-        requirement("chardet"),
-        requirement("idna"),
+        requirement("beautifulsoup4"),
         requirement("lxml"),
-        requirement("soupsieve"),
         "@odict//python",
     ],
 )
