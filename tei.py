@@ -1,46 +1,38 @@
 import tarfile
-import xml.etree.ElementTree as ET
 
+from lxml import etree as ET
 from bs4 import BeautifulSoup
+from dict import Definition, Entry, Etymology, Usage
+from alive_progress import alive_bar
 
 
 def tei_to_odxml(tei_doc):
     document = BeautifulSoup(tei_doc, 'lxml')
-    entries = document.body.findAll('entry')
     root = ET.Element("dictionary", attrib={'name': 'FreeDict'})
+    entries = {}
 
-    for entry in entries:
-        term = entry.orth.getText()
-        entry_attr = {'term': term}
+    with alive_bar(title="> Processing entries...") as bar:
+        for entry in document.body.findAll('entry'):
+            term = entry.orth.getText()
+            pron = entry.pron.getText() if entry.pron is not None else ""
+            usages: list[Usage] = []
 
-        print("Processing word \"%s\"..." % term)
+            for sense in entry.findAll('sense'):
+                defs: list[Definition] = []
 
-        if entry.pron is not None:
-            entry_attr['pronunciation'] = entry.pron.getText()
+                for cit in sense.findAll('cit'):
+                    defs.append(Definition(cit.getText().strip()))
 
-        entry_node = ET.Element("entry", attrib=entry_attr)
-        ety_node = ET.Element("ety")
-        senses = entry.findAll('sense')
+                if len(defs) > 0:
+                    usages.append(Usage(definitions=defs))
 
-        for sense in senses:
-            usage_node = ET.Element("usage")
-            citations = sense.findAll('cit')
+            if len(usages) > 0:
+                entries[term] = Entry(term, pronunciation=pron,
+                                      etymologies=set([Etymology(usages)]))
+                bar()
 
-            for cit in citations:
-                def_node = ET.Element("definition")
-
-                def_node.text = cit.getText().strip()
-
-                usage_node.append(def_node)
-
-                if len(citations) > 0:
-                    entry_node.append(usage_node)
-
-            ety_node.append(usage_node)
-            entry_node.append(ety_node)
-
-            if len(senses) > 0:
-                root.append(entry_node)
+    for entry in entries.values():
+        root.append(entry.xml())
 
     return ET.tostring(root).decode('utf-8')
 
