@@ -1,21 +1,14 @@
-# ODict <> FreeDict Converter
+# ODict Dictionary Converters
 
-This repo contains a tiny Python 3 script for converting the latest [FreeDict](https://freedict.org) dictionaries to the
-ODict format.
+This repo contains Python 3 scripts for converting various open-source dictionaries and formats to the ODict format. Currently, the dictionaries supported are [CEDict](https://www.mdbg.net/chinese/dictionary?page=cedict), [ECDict](https://github.com/skywind3000/ECDICT) and [FreeDict](https://freedict.org/). 
 
-To run in an isolated Python 3 virtual environment, simply run:
+If you have a request for a dictionary, please open an issue!
 
-```bash
-$ python3 -m venv .venv
-$ source .venv/bin/activate
-$ pip install -r requirements.txt
-$ python3 main.py
-```
+To setup this repo:
 
-or run using [Bazel](https://bazel.build) by running:
-
-```
-$ bazel run main
-```
+1. First clone the repo and install [asdf](https://asdf-vm.com/). 
+2. Run `asdf install`.
+3. Run `poetry install`.
+4. Run `just [freedict|ecdict|cedict]` (depending on the dictionary you wish to generate).
 
 The compiled dictionaries are available under `./dictionaries`.

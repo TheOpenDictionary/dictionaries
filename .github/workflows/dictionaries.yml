@@ -9,18 +9,29 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
-
-      - name: Setup Bazelisk
-        run: |
-          go get github.com/bazelbuild/bazelisk
-          export PATH=$PATH:$(go env GOPATH)/bin
-
-      - name: Run program
-        run: bazelisk run main
-
-      - name: Copy files
-        run: cp -r bazel-bin/main-bin.runfiles/__main__/dictionaries .
-
+      - name: Setup asdf
+        uses: asdf-vm/actions/setup@v1
+      - name: Cache asdf
+        id: cache-asdf
+        uses: actions/cache@v2
+        with:
+          path: |
+            /home/runner/.asdf
+          key: ${{ runner.os }}-asdf-${{ hashFiles('**/.tool-versions') }}
+          restore-keys: |
+            ${{ runner.os }}-asdf-
+      - name: Cache Poetry dependencies
+        uses: actions/cache@v2
+        with:
+          path: |
+            /home/runner/.venv
+          key: ${{ runner.os }}-poetry-${{ hashFiles('**/python/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-
+      - name: Install dependencies in .tool-versions
+        uses: asdf-vm/actions/install@v1
+      - name: Run generators
+        run: just freedict cedict ecdict
       - name: Add and commit to repo
         uses: EndBug/add-and-commit@v7
         with:
