@@ -153,7 +153,7 @@ async def process_dict(language_pair, url):
 
         content = read_tei_archive(output_path)
         dictionary = tei_to_odxml(content)
-        dict_path = "../dictionaries/freedict/%s.odict" % language_pair
+        dict_path = "dictionaries/freedict/%s.odict" % language_pair
 
         print('> Writing to "%s"...' % dict_path)
 
