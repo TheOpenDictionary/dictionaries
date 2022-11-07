@@ -7,7 +7,7 @@ from alive_progress import alive_bar
 
 
 def tei_to_odxml(tei_doc):
-    document = BeautifulSoup(tei_doc, 'lxml')
+    document = BeautifulSoup(tei_doc, features="xml")
     root = ET.Element("dictionary", attrib={'name': 'FreeDict'})
     entries = {}
 

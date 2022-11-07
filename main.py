@@ -4,7 +4,7 @@ import asyncio
 
 from os import path
 from pathlib import Path
-from python.odict import Dictionary
+from theopendictionary import Dictionary
 from ctypes import *
 from os import path
 from tempfile import TemporaryDirectory
@@ -14,7 +14,6 @@ from tei import tei_to_odxml, read_tei_archive
 async def process_dict(language_pair, url):
     with TemporaryDirectory() as dirpath:
         print("> Processing language pair %s..." % language_pair)
-
         file_name = url.split('/')[-1]
         output_path = path.join(dirpath, file_name)
 
@@ -46,12 +45,11 @@ async def process():
     for j in json:
         if "name" in j:
             language_pair = j["name"]
-            if language_pair == "spa-deu":
-                for release in j["releases"]:
-                    if release["platform"] == "src":
-                        url = release["URL"]
-                        tasks.append(asyncio.ensure_future(
-                            process_dict(language_pair, url)))
+            for release in j["releases"]:
+                if release["platform"] == "src":
+                    url = release["URL"]
+                    tasks.append(asyncio.ensure_future(
+                        process_dict(language_pair, url)))
 
     await asyncio.gather(*tasks)
 
