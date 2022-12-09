@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "freedict"
+name = "odict-dictionaries"
 version = "0.1.0"
 description = ""
 authors = ["Tyler Nickerson <nickersoft@gmail.com>"]
@@ -12,6 +12,7 @@ asyncio = "^3.4.3"
 alive-progress = "^2.4.1"
 lxml = "^4.9.1"
 theopendictionary = "^0.0.5"
+ftputil = "^5.0.4"
 
 [tool.poetry.dev-dependencies]
 black = "^22.10.0"
