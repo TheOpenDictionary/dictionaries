@@ -11,7 +11,7 @@ beautifulsoup4 = "^4.11.1"
 asyncio = "^3.4.3"
 alive-progress = "^2.4.1"
 lxml = "^4.9.1"
-theopendictionary = "^0.0.5"
+theopendictionary = "^0.0.7"
 ftputil = "^5.0.4"
 
 [tool.poetry.dev-dependencies]

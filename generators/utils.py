@@ -6,8 +6,7 @@ class Definition:
         self.text = text
 
     def xml(self):
-        node = etree.Element("definition")
-        node.text = self.text
+        node = etree.Element("definition", attrib={"value": self.text})
         return node
 
 
@@ -68,14 +67,19 @@ class Etymology:
 
 class Entry:
     def __init__(
-        self, term: str, pronunciation: str = "", etymologies: list[Etymology] = []
+        self,
+        term: str,
+        see: str = "",
+        pronunciation: str = "",
+        etymologies: list[Etymology] = [],
     ) -> None:
         self.etymologies = etymologies
+        self.see = see
         self.term = term
         self.pronunciation = pronunciation
 
     def xml(self):
-        node = etree.Element("entry", attrib={"term": self.term})
+        node = etree.Element("entry", attrib={"see": self.see, "term": self.term})
 
         for ety in self.etymologies:
             node.append(ety.xml())

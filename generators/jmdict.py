@@ -27,16 +27,22 @@ def resolve_pos(pos):
     if pos.startswith("adv-"):
         return "adv"
 
+    if pos.startswith("v"):
+        return "v"
+
     if pos == "int":
         return "intj"
-
-    if pos == "pref":
-        return "pre"
 
     if pos == "prt":
         return "part"
 
-    if pos in ["n", "v", "pn", "suf", "conj"]:
+    if pos == "pn":
+        return "pro"
+
+    if pos == "suf":
+        return "suff"
+
+    if pos in ["n", "v", "conj"]:
         return pos
 
     return "un"
@@ -59,9 +65,7 @@ with TemporaryDirectory() as dirpath:
 
         print("> Reading into memory (this might take some time)...")
 
-        document = BeautifulSoup(
-            re.sub(r"<pos>&(\w+);</pos>", r"<pos>\1</pos>", content), features="xml"
-        )
+        document = BeautifulSoup(re.sub(r"&(\w+?);", r"\1", content), features="xml")
 
         entries = document.find_all("entry")
 
@@ -70,17 +74,23 @@ with TemporaryDirectory() as dirpath:
         with alive_bar(len(entries), title="> Processing entries...") as bar:
             for entry in entries:
                 keb = entry.find("keb")
-                reb = entry.find("reb")
+                reb = entry.find_all("reb")
 
                 if keb:
                     term = keb.text
-                    pronunciation = reb.text if reb else None
+                    pronunciation = reb[0].text if len(reb) > 0 else None
                     senses = entry.find_all("sense")
                     usages: list[Usage] = []
+                    misc = entry.find_all("misc")
+                    fallback_pos = entry.find("pos")
+                    usually_kana = any(m.text == "uk" for m in misc)
+
+                    if usually_kana:
+                        for r in reb:
+                            root.entries.append(Entry(term=r.text, see=term))
 
                     for sense in senses:
-                        # TODO: add support for xref?
-                        pos = sense.find("pos") or entry.find("pos")
+                        pos = sense.find("pos") or fallback_pos
                         pos = resolve_pos(pos.text) if pos else None
                         glosses = sense.find_all("gloss")
                         inf = sense.find("s_inf")
@@ -91,7 +101,7 @@ with TemporaryDirectory() as dirpath:
                             if gloss.get("xml:lang")
                             == (None if target_lang == "eng" else target_lang)
                         ]
-                        print(definitions)
+
                         if len(definitions) > 0:
                             usages.append(
                                 Usage(
@@ -100,7 +110,7 @@ with TemporaryDirectory() as dirpath:
                                     definitions=definitions,
                                 )
                             )
-                    print(len(usages))
+
                     if len(usages) > 0:
                         root.entries.append(
                             Entry(term=term, etymologies=[Etymology(usages=usages)])
