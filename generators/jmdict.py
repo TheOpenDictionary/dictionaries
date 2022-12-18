@@ -16,36 +16,20 @@ url = "ftp://ftp.edrdg.org/pub/Nihongo//JMdict.gz"
 
 target_lang = sys.argv[1] if len(sys.argv) > 1 else "eng"
 
+pos_resolution = {
+    "exp": "expr",
+    "int": "intj",
+    "pn": "pron",
+    "adj-i": "adj",
+    "prt": "part",
+    "suf": "suff",
+    "pre": "pref",
+    "unc": "un",
+}
+
 
 def resolve_pos(pos):
-    if pos.startswith("adj-"):
-        return "adj"
-
-    if pos.startswith("n-"):
-        return "n"
-
-    if pos.startswith("adv-"):
-        return "adv"
-
-    if pos.startswith("v"):
-        return "v"
-
-    if pos == "int":
-        return "intj"
-
-    if pos == "prt":
-        return "part"
-
-    if pos == "pn":
-        return "pro"
-
-    if pos == "suf":
-        return "suff"
-
-    if pos in ["n", "v", "conj"]:
-        return pos
-
-    return "un"
+    return pos_resolution.get(pos, pos)
 
 
 with TemporaryDirectory() as dirpath:
@@ -65,7 +49,7 @@ with TemporaryDirectory() as dirpath:
 
         print("> Reading into memory (this might take some time)...")
 
-        document = BeautifulSoup(re.sub(r"&(\w+?);", r"\1", content), features="xml")
+        document = BeautifulSoup(re.sub(r"&(.+?);", r"\1", content), features="xml")
 
         entries = document.find_all("entry")
 
@@ -91,7 +75,9 @@ with TemporaryDirectory() as dirpath:
 
                     for sense in senses:
                         pos = sense.find("pos") or fallback_pos
-                        pos = resolve_pos(pos.text) if pos else None
+                        if not pos:
+                            print(term)
+                        pos = resolve_pos(pos.text) if pos else ""
                         glosses = sense.find_all("gloss")
                         inf = sense.find("s_inf")
                         description = inf.text if inf is not None else ""
