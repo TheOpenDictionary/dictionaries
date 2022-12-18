@@ -15,6 +15,11 @@ from utils import Dictionary, Entry, Etymology, Usage, Definition
 url = "ftp://ftp.edrdg.org/pub/Nihongo//JMdict.gz"
 
 target_lang = sys.argv[1] if len(sys.argv) > 1 else "eng"
+langs =  ["eng", "ger", "spa", "rus", "hun", "fre", "dut", "swe", "slv"]
+
+if target_lang not in langs:
+    print("Invalid target language! Must be one of the following: " + ", ".join(langs))
+    sys.exit(1)
 
 pos_resolution = {
     "exp": "expr",
@@ -36,15 +41,15 @@ with TemporaryDirectory() as dirpath:
     file_name = url.split("/")[-1]
     output_path = path.join(dirpath, "JMdict.gz")
 
-    # if not path.exists(output_path):
-    #     print("> Downloading latest JMDict version...")
+    if not path.exists(output_path):
+        print("> Downloading latest JMDict version...")
 
-    #     ftp_host = FTPHost("ftp.edrdg.org", "anonymous", "")
-    #     ftp_host.download("/pub/Nihongo//JMdict.gz", output_path)
+        ftp_host = FTPHost("ftp.edrdg.org", "anonymous", "")
+        ftp_host.download("/pub/Nihongo//JMdict.gz", output_path)
 
-    #     print("> Download complete!")
+        print("> Download complete!")
 
-    with gzip.open("/Users/tjnickerson/Downloads/JMDict.gz", "rb") as f:
+    with gzip.open(output_path, "rb") as f:
         content = f.read().decode("utf-8")
 
         print("> Reading into memory (this might take some time)...")
@@ -107,8 +112,12 @@ with TemporaryDirectory() as dirpath:
         print("> Creating file...")
 
         xml = etree.tostring(root.xml()).decode("utf-8")
+        file_base = "dictionaries/jmdict/jpn-%s" % target_lang
 
-        ODictionary.write(xml, "dictionaries/jmdict/jpn-%s.odict" % target_lang)
+        with open("%s.xml" % file_base, "w") as f:
+            f.write(xml)
+
+        ODictionary.write(xml, "%s.odict" % file_base)
 
         print("> Dictionary written!")
         exit()
