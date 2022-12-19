@@ -111,7 +111,7 @@ with TemporaryDirectory() as dirpath:
 
         print("> Creating file...")
 
-        xml = etree.tostring(root.xml()).decode("utf-8")
+        xml = etree.tostring(root.xml(), pretty_print=True).decode("utf-8")
         file_base = "dictionaries/jmdict/jpn-%s" % target_lang
 
         with open("%s.xml" % file_base, "w") as f:
