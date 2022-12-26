@@ -4,7 +4,7 @@ import tarfile
 
 from os import path
 from pathlib import Path
-from theopendictionary import ODictionary
+from theopendictionary import Dictionary as ODictionary
 from ctypes import *
 from os import path
 from tempfile import TemporaryDirectory
@@ -73,9 +73,13 @@ async def process_dict(language_pair, url):
 
         content = read_tei_archive(output_path)
         dictionary = tei_to_odxml(content)
-        dict_path = "dictionaries/freedict/%s.odict" % language_pair
+        dict_base = "dictionaries/freedict"
+        dict_path = "%s/%s.odict" % (dict_base, language_pair)
 
         print('> Writing to "%s"...' % dict_path)
+
+        with open("%s/%s.xml" % (dict_base, language_pair), "w") as f:
+            f.write(dictionary)
 
         ODictionary.write(dictionary, dict_path)
 
