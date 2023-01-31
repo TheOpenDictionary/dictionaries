@@ -5,8 +5,6 @@ import tarfile
 from os import path
 from pathlib import Path
 from theopendictionary import Dictionary as ODictionary
-from ctypes import *
-from os import path
 from tempfile import TemporaryDirectory
 from lxml import etree
 from bs4 import BeautifulSoup

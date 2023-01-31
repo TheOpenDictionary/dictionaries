@@ -24,6 +24,30 @@ class Group:
         return node
 
 
+class DefinitionNode:
+    """
+    A special kind of definition class that will resolve to a Group if it has children,
+    and a regular Definition node if it doesn't.
+    Used in tree traversal, in generators such as wiktextract.
+    """
+
+    def __init__(self, definitions: dict[str, any], text: str = "") -> None:
+        self.definitions = definitions
+        self.text = text
+
+    def xml(self) -> str:
+        node = (
+            etree.Element("group", attrib={"description": self.text})
+            if len(self.definitions) > 0
+            else etree.Element("definition", attrib={"value": self.text})
+        )
+
+        for definition in self.definitions.values():
+            node.append(definition.xml())
+
+        return node
+
+
 class Usage:
     def __init__(
         self,

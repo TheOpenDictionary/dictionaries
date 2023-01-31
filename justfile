@@ -9,3 +9,6 @@ ecdict:
 
 jmdict language="eng":
   poetry run python generators/jmdict.py {{language}}
+
+wiktextract: 
+  poetry run python generators/wiktextract.py

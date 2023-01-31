@@ -6,7 +6,6 @@ from tempfile import TemporaryDirectory
 from alive_progress import alive_bar
 from bs4 import BeautifulSoup
 from lxml import etree
-import requests
 from ftputil import FTPHost
 from theopendictionary import Dictionary as ODictionary
 
@@ -104,7 +103,7 @@ with TemporaryDirectory() as dirpath:
 
                     if len(usages) > 0:
                         root.entries.append(
-                            Entry(term=term, etymologies=[Etymology(usages=usages)])
+                            Entry(term=term, etymologies=[Etymology(usages)])
                         )
 
                 bar()
