@@ -1,111 +1,202 @@
-import json
+from json import loads as load_json
+from os import makedirs, path
+import sys
+from tempfile import TemporaryDirectory
 
+from alive_progress import alive_bar
+import requests
+from theopendictionary import Dictionary as ODictionary
 from utils import Dictionary, Definition, DefinitionNode, Group, Usage, Etymology, Entry
 from lxml import etree
 
 entries = {}
 data = []
 dict = Dictionary(name="English Wiktionary")
-definitions = {}
+dict_base = "dictionaries/wiktionary"
 
-with open("/Users/tjnickerson/Downloads/kaikki.org-dictionary-English.json", "r") as f:
-    for line in f.readlines():
-        map = json.loads(line)
+if not path.exists(dict_base):
+    makedirs(dict_base)
 
-        pos = map.get("pos")
+pos_map = {
+    "abbrev": "abv",
+    "adv_phrase": "phr_adv",
+    "affix": "aff",
+    "article": "art",
+    "character": "chr",
+    "circumfix": "cf",
+    "infix": "inf",
+    "interfix": "intf",
+    "noun": "n",
+    "particle": "part",
+    "phrase": "phr",
+    "prefix": "pref",
+    "prep_phrase": "phr_prep",
+    "punct": "punc",
+    "suffix": "suff",
+    "symbol": "sym",
+    "verb": "v",
+}
 
-        term = map.get("word")
+lang_map = {
+    "eng": "English",
+    "fra": "French",
+    "ger": "German",
+    "ita": "Italian",
+    "pol": "Polish",
+    "spa": "Spanish",
+    "swe": "Swedish",
+    "jpn": "Japanese",
+    "rus": "Russian",
+    "ara": "Arabic",
+    "cmn": "Chinese",
+}
 
-        pronunciation = (
-            map.get("sounds")[0].get("ipa")
-            if map.get("sounds") and len(map.get("sounds")) > 0
-            else None
+
+pos_tags = set()
+entries = {}
+
+
+def download_dictionary(lang: str, outdir: str):
+    print("> Downloading dictionary for %s..." % lang)
+
+    lang_name = lang_map.get(lang)
+
+    if lang_name is None:
+        raise Exception(
+            "Language not supported: %s. Must be one of %s" % (lang, lang_map.keys())
         )
 
-        etymology_description = map.get("etymology_text")
+    url = "https://kaikki.org/dictionary/%s/kaikki.org-dictionary-%s.json" % (
+        lang_name,
+        lang_name,
+    )
 
-        root = DefinitionNode()
+    output_path = path.join(outdir, lang + ".gz")
+    blob = requests.get(url).content
 
-        senses = map.get("senses")
+    new_file = open(output_path, "w+b")
+    new_file.write(blob)
+    new_file.close()
 
-        for sense in senses:
-            glosses = sense.get("glosses")
-            raw_glosses = sense.get("raw_glosses") or glosses or []
+    return output_path
 
-            if raw_glosses:
-                definition_str = raw_glosses[-1]
-                key = glosses[-1]
-                definition = Definition(text=definition_str)
 
-                node = root.definitions
+def run(target_lang: str):
 
-                for gloss in glosses:
-                    if gloss not in node:
-                        print("yes")
-                        node[gloss] = {
-                            "description": definition_str,
-                            "definitions": {},
-                        }
-                    node = node[gloss]["definitions"]
+    with TemporaryDirectory() as dirpath:
 
-        if term == "abolitionism":
-            print(definitions)
-            exit(0)
-        # if len(glosses) > 2:
-        #     print(glosses)
-        #     exit(0)
+        dict_path = download_dictionary(target_lang, dirpath)
 
-        # if len(glosses) > 1:
-        #     parent = glosses[0]
+        with open(dict_path, "r") as f:
+            with alive_bar(title="> Processing entries for %s..." % target_lang) as bar:
+                for line in f.readlines():
+                    try:
+                        json = load_json(line)
+                        raw_pos = json.get("pos")
+                        pos = pos_map.get(raw_pos) or raw_pos
+                        term = json.get("word")
+                        pronunciation = (
+                            json.get("sounds")[0].get("ipa")
+                            if json.get("sounds") and len(json.get("sounds")) > 0
+                            else None
+                        ) or ""
 
-        #     if parent in definitions:
-        #         if isinstance(definitions[parent], Definition):
-        #             definitions[parent] = Group(
-        #                 description=parent,
-        #                 definitions=[definition],
-        #             )
-        #         else:
-        #             definitions[parent].definitions.append(definition)
-        #     else:
-        #         definitions[parent] = Group(
-        #             description=parent,
-        #             definitions=[definition],
-        #         )
-        # elif key in definitions:
-        #     definitions[key].description = definition
-        # else:
-        #     definitions[key] = definition
+                        etymology_description = json.get("etymology_text")
 
-        # groups_and_defs = definitions.values()
+                        root = DefinitionNode()
 
-        # groups = filter(lambda x: isinstance(x, Group), groups_and_defs)
+                        senses = json.get("senses")
 
-        # defs = filter(lambda x: isinstance(x, Definition), groups_and_defs)
+                        for sense in senses:
+                            glosses = sense.get("glosses") or []
+                            raw_glosses = sense.get("raw_glosses") or glosses
+                            examples = [
+                                ex
+                                for item in filter(
+                                    lambda x: x.get("type") == "example"
+                                    or x.get("type") is None,
+                                    sense.get("examples") or [],
+                                )
+                                for ex in item.get("text").split("\n")
+                            ]
 
-        # usage = Usage(
-        #     partOfSpeech=pos,
-        #     description=etymology_description,
-        #     groups=groups,
-        #     definitions=defs,
-        # )
+                            if raw_glosses:
+                                definition_str = raw_glosses[-1]
+                                node = root
 
-        # ety = Etymology(usages=[usage], description=etymology_description)
+                                for gloss in glosses:
+                                    if gloss not in node.definitions:
+                                        node.definitions[gloss] = DefinitionNode(
+                                            text=gloss
+                                        )
+                                    node = node.definitions[gloss]
 
-        # entry = Entry(term=term, pronunciation=pronunciation, etymologies=[ety])
+                                node.text = definition_str
+                                node.examples = examples
 
-        # if term == "dagger":
-        # print(line)
-        # print(etree.tostring(entry.xml()))
-        # exit(0)
-        # if len(glosses) > 1:
-        #     print(line)
-        #     exit(0)
+                        groups_and_defs = [
+                            node.convert() for node in root.definitions.values()
+                        ]
 
-        # for gloss in glosses:
-        #     definitions.append(Definition(text=gloss))
+                        groups = filter(lambda x: isinstance(x, Group), groups_and_defs)
 
-        # print(term)
-        # print(glosses)
-        # data.append()
+                        defs = filter(
+                            lambda x: isinstance(x, Definition), groups_and_defs
+                        )
 
-print(data[0])
+                        usage = Usage(
+                            partOfSpeech=pos,
+                            groups=groups,
+                            definitions=defs,
+                        )
+
+                        ety = Etymology(
+                            usages=[usage], description=etymology_description
+                        )
+
+                        if term in entries:
+                            entries[term].etymologies.append(ety)
+                        else:
+                            entries[term] = Entry(
+                                term=term,
+                                pronunciation=pronunciation,
+                                etymologies=[ety],
+                            )
+
+                        bar()
+                    except Exception as e:
+                        print(e)
+                        print("Received on line: " + line)
+
+        print("> Writing dictionary to file...")
+
+        for entry in entries.values():
+            dict.entries.append(entry)
+
+        dictionary = etree.tostring(dict.xml(), pretty_print=True).decode("utf-8")
+
+        output_path = "%s/%s" % (dict_base, "%s-eng" % target_lang)
+
+        with open(output_path + ".xml", "w") as f:
+            f.write(dictionary)
+
+        ODictionary.write(dictionary, output_path + ".odict")
+
+
+lang = sys.argv[1] if len(sys.argv) > 1 else "all"
+langs = lang_map.keys()
+
+if lang == "all":
+    for lc in langs:
+        print("> Generating dictionary for %s..." % lc)
+        run(lc)
+    exit(0)
+else:
+    if lang not in langs:
+        print(
+            "Invalid target language! Must be one of the following: " + ", ".join(langs)
+        )
+        sys.exit(1)
+
+    run(lang)
+    exit(0)

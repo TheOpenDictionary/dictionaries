@@ -1,5 +1,6 @@
 import csv
 from os import path
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from xml.etree.ElementTree import Element, tostring
@@ -64,8 +65,7 @@ with TemporaryDirectory() as dirpath:
                 usage = Element("usage")
 
                 for deff in definitions:
-                    d = Element("definition")
-                    d.text = deff
+                    d = Element("definition", attrib={"value": deff})
                     usage.append(d)
 
                 ety.append(usage)
@@ -77,8 +77,15 @@ with TemporaryDirectory() as dirpath:
 
             print("Writing dictionary to disk...")
 
-            Dictionary.write(
-                tostring(root).decode("utf-8"), "dictionaries/ecdict.odict"
-            )
+            dict_base = "dictionaries/ecdict"
+
+            Path(dict_base).mkdir(parents=True, exist_ok=True)
+
+            xml = tostring(root).decode("utf-8")
+
+            with open("%s/eng-zho.xml" % dict_base, "w") as f:
+                f.write(xml)
+
+            Dictionary.write(xml, "%s/eng-zho.odict" % dict_base)
     except Exception as e:
         print(e)

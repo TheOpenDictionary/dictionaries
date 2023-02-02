@@ -1,5 +1,5 @@
-freedict:
-	poetry run python generators/freedict.py
+freedict dictionary="all":
+	poetry run python generators/freedict.py {{dictionary}}
 
 cedict:
 	poetry run python generators/cedict.py
@@ -7,8 +7,10 @@ cedict:
 ecdict:
 	poetry run python generators/ecdict.py
 
-jmdict language="eng":
+jmdict language="all":
   poetry run python generators/jmdict.py {{language}}
 
-wiktextract: 
-  poetry run python generators/wiktextract.py
+wiktionary language="all": 
+  poetry run python generators/wiktextract.py {{language}}
+
+all: freedict cedict ecdict jmdict wiktionary

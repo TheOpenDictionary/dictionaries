@@ -1,4 +1,5 @@
 import gzip
+from pathlib import Path
 import requests
 import re
 
@@ -57,8 +58,7 @@ with TemporaryDirectory() as dirpath:
                 usage = Element("usage")
 
                 for deff in definitions:
-                    d = Element("definition")
-                    d.text = deff
+                    d = Element("definition", attrib={"value": deff})
                     usage.append(d)
 
                 ety.append(usage)
@@ -74,6 +74,13 @@ with TemporaryDirectory() as dirpath:
 
         xml = tostring(root).decode("utf-8")
 
-        Dictionary.write(xml, "dictionaries/cedict.odict")
+        dict_base = "dictionaries/cedict"
+
+        Path(dict_base).mkdir(parents=True, exist_ok=True)
+
+        with open("%s/zho-eng.xml" % dict_base, "w") as f:
+            f.write(xml)
+
+        Dictionary.write(xml, "%s/zho-eng.odict" % dict_base)
     except Exception as e:
         print(e)
