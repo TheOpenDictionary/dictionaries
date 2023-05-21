@@ -82,9 +82,7 @@ def download_dictionary(lang: str, outdir: str):
 
 
 def run(target_lang: str):
-
     with TemporaryDirectory() as dirpath:
-
         dict_path = download_dictionary(target_lang, dirpath)
 
         with open(dict_path, "r") as f:
@@ -95,6 +93,7 @@ def run(target_lang: str):
                         raw_pos = json.get("pos")
                         pos = pos_map.get(raw_pos) or raw_pos
                         term = json.get("word")
+                        should_add = False
                         pronunciation = (
                             json.get("sounds")[0].get("ipa")
                             if json.get("sounds") and len(json.get("sounds")) > 0
@@ -126,6 +125,7 @@ def run(target_lang: str):
 
                                 for gloss in glosses:
                                     if gloss not in node.definitions:
+                                        should_add = True
                                         node.definitions[gloss] = DefinitionNode(
                                             text=gloss
                                         )
@@ -134,34 +134,37 @@ def run(target_lang: str):
                                 node.text = definition_str
                                 node.examples = examples
 
-                        groups_and_defs = [
-                            node.convert() for node in root.definitions.values()
-                        ]
+                        if should_add:
+                            groups_and_defs = [
+                                node.convert() for node in root.definitions.values()
+                            ]
 
-                        groups = filter(lambda x: isinstance(x, Group), groups_and_defs)
-
-                        defs = filter(
-                            lambda x: isinstance(x, Definition), groups_and_defs
-                        )
-
-                        usage = Usage(
-                            partOfSpeech=pos,
-                            groups=groups,
-                            definitions=defs,
-                        )
-
-                        ety = Etymology(
-                            usages=[usage], description=etymology_description
-                        )
-
-                        if term in entries:
-                            entries[term].etymologies.append(ety)
-                        else:
-                            entries[term] = Entry(
-                                term=term,
-                                pronunciation=pronunciation,
-                                etymologies=[ety],
+                            groups = filter(
+                                lambda x: isinstance(x, Group), groups_and_defs
                             )
+
+                            defs = filter(
+                                lambda x: isinstance(x, Definition), groups_and_defs
+                            )
+
+                            usage = Usage(
+                                partOfSpeech=pos,
+                                groups=groups,
+                                definitions=defs,
+                            )
+
+                            ety = Etymology(
+                                usages=[usage], description=etymology_description
+                            )
+
+                            if term in entries:
+                                entries[term].etymologies.append(ety)
+                            else:
+                                entries[term] = Entry(
+                                    term=term,
+                                    pronunciation=pronunciation,
+                                    etymologies=[ety],
+                                )
 
                         bar()
                     except Exception as e:
