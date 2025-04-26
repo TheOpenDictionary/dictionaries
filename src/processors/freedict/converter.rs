@@ -1,8 +1,11 @@
+use std::collections::HashMap;
+
 use console::Term;
+use indicatif::ProgressBar;
 use map_macro::hash_map;
 use odict::{Dictionary, ID};
 
-use crate::processors::traits::Converter;
+use crate::{processors::traits::Converter, progress::STYLE_PROGRESS};
 
 use super::schema::tei::Entry as FreeDictEntry;
 
@@ -27,10 +30,26 @@ impl Converter for FreeDictConverter {
             entries: hash_map! {},
         };
 
-        // let pb = ProgressBar::new(data.len() as u64);
+        let pb = ProgressBar::new(data.len() as u64);
 
-        // pb.set_style(STYLE_PROGRESS.clone());
+        pb.set_style(STYLE_PROGRESS.clone());
 
+        let entries: HashMap<String, odict::Entry> = hash_map! {};
+
+        for d in data {
+            let entry = odict::Entry {
+                term: d.form[0].orth[0].content,
+                see_also: None,
+                lemma: None,
+                etymologies: odict::Etymology {
+                    senses: d
+                        .sense
+                        .iter()
+                        .map(|sense| odict::Sense { pos: sense.cit[0] }),
+                },
+                forms: vec![],
+            };
+        }
         // for entry_data in data {
         //     // Create definitions from each definition string
         //     let definitions: Vec<Definition> = entry_data

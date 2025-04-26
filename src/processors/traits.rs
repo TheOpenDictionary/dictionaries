@@ -17,8 +17,8 @@ pub trait Downloader {
     async fn url(&self) -> anyhow::Result<String>;
 
     async fn download(&self, term: &Term) -> anyhow::Result<Vec<u8>> {
-        let url = self.url().await?;
-
+        // let url = self.url().await?;
+        let url = "google.com".to_string();
         // Create .data directory if it doesn't exist
         let data_dir = PathBuf::from(".data");
 
@@ -31,9 +31,9 @@ pub trait Downloader {
 
         hasher.update(url.as_bytes());
 
-        let filename = format!("{:x}", hasher.finalize());
-        let file_path = data_dir.join(&filename);
-
+        // let filename = format!("{:x}", hasher.finalize());
+        // let file_path = data_dir.join(&filename);
+        let file_path = PathBuf::from("/Users/tjnickerson/Downloads/eng-fra.src.tar.xz");
         // If file exists, read and return it
         if file_path.exists() {
             term.write_line(
