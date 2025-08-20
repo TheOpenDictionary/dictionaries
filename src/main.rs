@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use crate::processors::wiktionary::SUPPORTED_LANGUAGES;
+
 use self::commands::Commands;
 use clap::{Parser, command};
 use console::Term;
@@ -25,16 +27,61 @@ struct Cli {
     output: Option<String>,
 }
 
+fn get_default_path(dictionary: &str, language: &str) -> PathBuf {
+    format!("out/{}/{}.odict", dictionary, language).into()
+}
+
+async fn process_all<T: Processor>(
+    term: &Term,
+    processor: T,
+    dictionary: &str,
+    languages: Vec<&str>,
+) -> odict::Result<()> {
+    for language in languages {
+        let output_path = get_default_path(dictionary, language);
+
+        let dict = processor
+            .process(&Term::stdout(), Some(language.to_string()))
+            .await
+            .unwrap();
+
+        save_dictionary(term, &dict, &output_path).unwrap();
+    }
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() {
     let args = Cli::parse();
     let term = Term::stdout();
+
+    let (dictionary_name, language) = match &args.command {
+        Commands::Wiktionary(wiktionary_args) => ("wiktionary", wiktionary_args.language.clone()),
+        Commands::CEDict => ("cedict", "zho-eng".to_string()),
+        Commands::TestFrequency { .. } => unreachable!(),
+    };
 
     match &args.command {
         Commands::TestFrequency { language, word } => {
             test_frequency::test_frequency(language, word, &term).await
         }
         _ => {
+            if let Commands::Wiktionary(wiktionary_args) = &args.command {
+                if wiktionary_args.language == "all" {
+                    process_all(
+                        &term,
+                        WiktionaryProcessor::new().unwrap(),
+                        dictionary_name,
+                        SUPPORTED_LANGUAGES.keys().cloned().collect(),
+                    )
+                    .await
+                    .unwrap();
+
+                    return;
+                }
+            }
+
             let dictionary = match &args.command {
                 Commands::Wiktionary(wiktionary_args) => WiktionaryProcessor::new()
                     .unwrap()
@@ -49,20 +96,12 @@ async fn main() {
                 Commands::TestFrequency { .. } => unreachable!(),
             };
 
-            let (command_name, language) = match &args.command {
-                Commands::Wiktionary(wiktionary_args) => {
-                    ("wiktionary", wiktionary_args.language.clone())
-                }
-                Commands::CEDict => ("cedict", "zho-eng".to_string()),
-                Commands::TestFrequency { .. } => unreachable!(),
-            };
-
             let output_path: PathBuf = match &args.output {
                 Some(path) => path.clone().into(),
-                None => format!("out/{}/{}.odict", command_name, language).into(),
+                None => get_default_path(dictionary_name, &language),
             };
 
-            save_dictionary(term, &dictionary, &output_path).unwrap();
+            save_dictionary(&term, &dictionary, &output_path).unwrap();
         }
     }
 }

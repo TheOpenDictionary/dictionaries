@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use crate::progress::STYLE_DOWNLOAD;
 
 pub fn save_dictionary(
-    term: Term,
+    term: &Term,
     dictionary: &odict::Dictionary,
     output_path: &PathBuf,
 ) -> anyhow::Result<()> {
