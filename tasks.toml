@@ -1,5 +1,5 @@
-["run"]
+["convert"]
 run = 'cargo run --release'
 
-["run:debug"]
-run = 'cargo run {{arg(name="generator")}} {{arg(name="language")}}'
+["convert:debug"]
+run = 'cargo run {{arg(name="dictionary")}} {{arg(name="language")}}'
