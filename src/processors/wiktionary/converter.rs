@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::{frequency::FrequencyMap, processors::traits::Converter, progress::STYLE_PROGRESS};
 use console::Term;
 use map_macro::{hash_map, hash_set};
-use odict::{
+use odict::schema::{
     Definition, DefinitionType, Dictionary, Entry, EntryRef, Etymology, Form, Group, ID, MediaURL,
     PartOfSpeech, Pronunciation, PronunciationKind, Sense,
 };
@@ -111,7 +111,7 @@ impl Converter for WiktionaryConverter {
                 .iter()
                 .map(|s| s.to_owned())
                 .filter_map(|s| s.into())
-                .collect::<Vec<odict::Pronunciation>>();
+                .collect::<Vec<odict::schema::Pronunciation>>();
 
             let mut definitions: Vec<DefinitionType> = vec![];
             let mut group_map: HashMap<String, usize> = hash_map! {};

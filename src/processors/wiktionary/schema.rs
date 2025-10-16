@@ -41,7 +41,7 @@ pub struct WiktionaryEntry {
     pub etymology_number: Option<u32>,
     /// Descendants of the word
     #[serde(default)]
-    pub descendants: Vec<Descendant>,
+    pub descendants: Vec<WordLink>,
     /// Non-disambiguated synonyms
     #[serde(default)]
     pub synonyms: Vec<WordLink>,

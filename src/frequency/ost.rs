@@ -41,7 +41,7 @@ pub async fn get_subtitle_frequencies(
             content
         }
         None => {
-            term.write_line(format!("⬇️ Downloading frequency list from {}...", url).as_str())?;
+            term.write_line(format!("⬇️ Downloading frequency list from {url}...").as_str())?;
 
             let content = download_with_progress(&url, &file_path).await?;
 

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use async_trait::async_trait;
 use console::Term;
-use odict::Dictionary;
+use odict::schema::Dictionary;
 
 use crate::{
     frequency::FrequencyMap,
