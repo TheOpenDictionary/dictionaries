@@ -12,7 +12,7 @@ flate2 = "1.1.2"
 indicatif = "0.18.0"
 isolang = "2.4.0"
 map-macro = "0.3.0"
-odict = "2.9.1"
+odict = "3.1.0"
 rayon = "1.11.0"
 regex = "1.11.2"
 reqwest = { version = "0.12.23", features = ["stream"] }

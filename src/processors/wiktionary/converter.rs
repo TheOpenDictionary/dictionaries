@@ -105,6 +105,26 @@ impl Converter for WiktionaryConverter {
             let pos = self.resolve_pos(&entry);
             let term = entry.word.to_owned();
             let see_also = entry.redirects.as_ref().map(|r| r[0].to_owned());
+
+            if matches!(pos, PartOfSpeech::Other(ref s) if s == "soft-redirect") {
+                // Create entry with see_also for soft-redirects, but no etymologies
+                if let Some(see_also_ref) = see_also {
+                    if !entries.contains_key(term.as_str()) {
+                        let rank = frequency_map.as_ref().and_then(|m| m.get_frequency(&term));
+                        let entry = Entry {
+                            etymologies: vec![],
+                            term: term.to_owned(),
+                            rank,
+                            media: vec![],
+                            see_also: Some(EntryRef::from(see_also_ref)),
+                        };
+                        entries.insert(term.clone(), entry);
+                    }
+                }
+                progress.inc(1);
+                continue;
+            }
+
             let etymology_text = entry.etymology_text.to_owned();
             let pronunciations = entry
                 .sounds
@@ -179,6 +199,13 @@ impl Converter for WiktionaryConverter {
                     tags: f.tags.to_owned(),
                 })
                 .collect();
+
+            // Only create a sense if there are definitions
+            // (empty senses from soft-redirects should not be added)
+            if definitions.is_empty() {
+                progress.inc(1);
+                continue;
+            }
 
             let sense = Sense {
                 pos: pos.to_owned(),

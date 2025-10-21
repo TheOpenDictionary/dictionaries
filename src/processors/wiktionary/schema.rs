@@ -263,16 +263,6 @@ pub struct Template {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Descendant {
-    /// Level of indentation
-    pub depth: u32,
-    /// Templates on the line
-    pub templates: Vec<Template>,
-    /// Expanded and cleaned line text
-    pub text: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct WordLink {
     /// Alternative form of the target
     #[serde(default)]
