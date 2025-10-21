@@ -41,7 +41,7 @@ pub struct WiktionaryEntry {
     pub etymology_number: Option<u32>,
     /// Descendants of the word
     #[serde(default)]
-    pub descendants: Vec<Descendant>,
+    pub descendants: Vec<WordLink>,
     /// Non-disambiguated synonyms
     #[serde(default)]
     pub synonyms: Vec<WordLink>,
@@ -260,16 +260,6 @@ pub struct Template {
     /// Expanded template text
     #[serde(default)]
     pub expansion: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Descendant {
-    /// Level of indentation
-    pub depth: u32,
-    /// Templates on the line
-    pub templates: Vec<Template>,
-    /// Expanded and cleaned line text
-    pub text: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use console::Term;
 use map_macro::{hash_map, hash_set};
-use odict::{
+use odict::schema::{
     Definition, DefinitionType, Dictionary, Entry, Etymology, Form, FormKind, ID, PartOfSpeech,
     Pronunciation, Sense,
 };
@@ -77,7 +77,7 @@ impl Converter for CEDictConverter {
                 id: None,
                 pronunciations: vec![Pronunciation {
                     value: pronunciation.clone(),
-                    kind: odict::PronunciationKind::Pinyin.into(),
+                    kind: odict::schema::PronunciationKind::Pinyin.into(),
                     media: vec![],
                 }],
                 description: None,

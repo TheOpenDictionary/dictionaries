@@ -1,5 +1,5 @@
 use map_macro::hash_map;
-use odict::PartOfSpeech;
+use odict::schema::PartOfSpeech;
 use std::{collections::HashMap, sync::LazyLock};
 
 pub const SUPPORTED_LANGUAGES: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
