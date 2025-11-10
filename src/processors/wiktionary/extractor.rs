@@ -1,47 +1,61 @@
-use console::Term;
 use rayon::prelude::*;
 
-use crate::{processors::traits::Extractor, progress::STYLE_PROGRESS};
+use crate::{
+    output::{StyledPrefix, clear_line},
+    prefix_println,
+    processors::traits::Extractor,
+    progress::STYLE_PROGRESS,
+};
 
 use super::schema::WiktionaryEntry;
 
-pub struct WiktionaryExtractor {}
+pub struct WiktionaryExtractor {
+    prefix: String,
+}
 
-impl Extractor for WiktionaryExtractor {
+impl<'a> Extractor<'a> for WiktionaryExtractor {
     type Entry = WiktionaryEntry;
 
-    fn extract(&self, term: &Term, data: &Vec<u8>) -> anyhow::Result<Vec<WiktionaryEntry>> {
-        term.write_line("🔍 Extracting the dictionary...")?;
-
+    fn extract(&self, data: &Vec<u8>) -> anyhow::Result<Vec<WiktionaryEntry>> {
         let text = String::from_utf8_lossy(data);
 
-        let progress = indicatif::ProgressBar::new(text.lines().count() as u64);
+        let progress = crate::progress::MULTI_PROGRESS
+            .add(indicatif::ProgressBar::new(text.lines().count() as u64));
 
         progress.set_style(STYLE_PROGRESS.clone());
+        progress.set_prefix(self.prefix.clone());
+        progress.set_message("Extracting the dictionary...");
 
-        let result: Result<Vec<_>, _> = text
-            .lines()
-            .enumerate()
-            .par_bridge()
-            .map(|(i, l)| {
+        let result: Vec<_> = text
+            .par_lines()
+            .map(|l| {
                 progress.inc(1);
-                serde_json::from_str(l)
-                    .map_err(|e| anyhow::anyhow!("Failed to parse line {}: {} - {}", i + 1, e, l))
+
+                match serde_json::from_str(l) {
+                    Ok(entry) => Some(entry),
+                    Err(e) => {
+                        crate::progress::MULTI_PROGRESS
+                            .println(format!("{} Failed to parse line: {}", self.prefix, e))
+                            .ok();
+                        None
+                    }
+                }
             })
+            .filter(|result| result.is_some())
+            .map(|entry| entry.unwrap())
             .collect();
 
-        progress.finish_and_clear();
+        progress.finish_with_message("Extraction complete");
 
-        term.clear_last_lines(1)?;
-        term.write_line("✅ Extraction complete")?;
-
-        Ok(result?)
+        Ok(result)
     }
 
-    fn new() -> anyhow::Result<Self>
+    fn new(language: &'a str) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
-        Ok(Self {})
+        Ok(Self {
+            prefix: language.styled_prefix(),
+        })
     }
 }

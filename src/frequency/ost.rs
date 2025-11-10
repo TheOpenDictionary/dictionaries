@@ -1,9 +1,12 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use console::Term;
 use regex::Regex;
 
-use crate::utils::{decompress_gzip, download_with_progress, hash_url, read_file, write_file};
+use crate::{
+    output::clear_line,
+    prefix_println,
+    utils::{decompress_gzip, download_with_progress, hash_url, read_file, write_file},
+};
 
 fn get_source(_language_code: &str) -> &str {
     return "OpenSubtitles";
@@ -15,8 +18,10 @@ fn get_version(_language_code: &str) -> &str {
 
 pub async fn get_subtitle_frequencies(
     language_code: &str,
-    term: &Term,
+    terminal_prefix: &String,
 ) -> anyhow::Result<HashMap<String, u32>> {
+    let prefix = terminal_prefix.clone();
+
     let url = format!(
         "https://object.pouta.csc.fi/OPUS-{}/{}/freq/{}.freq.gz",
         get_source(language_code),
@@ -34,19 +39,17 @@ pub async fn get_subtitle_frequencies(
 
     let content = match read_file(&file_path)? {
         Some(content) => {
-            term.write_line(&format!(
-                "✅ Using cached frequency list from {}",
-                file_path.display()
-            ))?;
+            crate::progress::MULTI_PROGRESS
+                .println(format!(
+                    "{} Using cached frequency list from {}",
+                    prefix,
+                    file_path.display()
+                ))
+                .ok();
             content
         }
         None => {
-            term.write_line(format!("⬇️ Downloading frequency list from {url}...").as_str())?;
-
-            let content = download_with_progress(&url, &file_path).await?;
-
-            term.clear_line()?;
-            term.write_line("✅ Download complete")?;
+            let content = download_with_progress(&prefix, &url, &file_path).await?;
 
             write_file(&file_path, &content)?;
 
@@ -77,10 +80,13 @@ pub async fn get_subtitle_frequencies(
         }
     }
 
-    term.write_line(&format!(
-        "✅ Loaded subtitle frequency data for {} words",
-        map.len()
-    ))?;
+    crate::progress::MULTI_PROGRESS
+        .println(format!(
+            "{} Loaded subtitle frequency data for {} words",
+            prefix,
+            map.len()
+        ))
+        .ok();
 
     Ok(map)
 }

@@ -1,23 +1,27 @@
 use std::path::PathBuf;
 
 use async_trait::async_trait;
-use console::Term;
 use odict::schema::Dictionary;
 
 use crate::{
     frequency::FrequencyMap,
+    output::{StyledPrefix, clear_line},
+    prefix_println,
     utils::{download_with_progress, hash_url, read_file, write_file},
 };
 
 #[async_trait(?Send)]
-pub trait Downloader {
-    fn new(language: &Option<String>) -> anyhow::Result<Self>
+pub trait Downloader<'a> {
+    fn new(language: &'a str) -> anyhow::Result<Self>
     where
         Self: Sized;
 
+    fn language(&self) -> &'a str;
+
     fn url(&self) -> String;
 
-    async fn download(&self, term: &Term) -> anyhow::Result<Vec<u8>> {
+    async fn download(&self) -> anyhow::Result<Vec<u8>> {
+        let prefix = self.language().styled_prefix();
         let url = self.url();
         let data_dir = PathBuf::from(".data");
 
@@ -29,18 +33,17 @@ pub trait Downloader {
 
         let content = match read_file(&file_path)? {
             Some(content) => {
-                term.write_line(
-                    format!("✅ Using cached dictionary from {}", file_path.display()).as_str(),
-                )?;
+                crate::progress::MULTI_PROGRESS
+                    .println(format!(
+                        "{} Using cached dictionary from {}",
+                        prefix,
+                        file_path.display()
+                    ))
+                    .ok();
                 content
             }
             None => {
-                term.write_line(format!("⬇️ Downloading the dictionary from {}...", url).as_str())?;
-
-                let content = download_with_progress(&url, &file_path).await?;
-
-                term.clear_line()?;
-                term.write_line("✅ Download complete")?;
+                let content = download_with_progress(&prefix, &url, &file_path).await?;
 
                 write_file(&file_path, &content)?;
 
@@ -52,55 +55,65 @@ pub trait Downloader {
     }
 }
 
-pub trait Extractor {
+pub trait Extractor<'a> {
     type Entry;
 
-    fn new() -> anyhow::Result<Self>
+    fn new(language: &'a str) -> anyhow::Result<Self>
     where
         Self: Sized;
 
-    fn extract(&self, term: &Term, data: &Vec<u8>) -> anyhow::Result<Vec<Self::Entry>>;
+    fn extract(&self, data: &Vec<u8>) -> anyhow::Result<Vec<Self::Entry>>;
 }
 
-pub trait Converter {
+pub trait Converter<'a> {
     type Entry;
 
-    fn new() -> anyhow::Result<Self>
+    fn new(language: &'a str) -> anyhow::Result<Self>
     where
         Self: Sized;
 
     fn convert(
         &mut self,
-        term: &Term,
         frequency_map: &Option<FrequencyMap>,
         data: &Vec<Self::Entry>,
     ) -> anyhow::Result<Dictionary>;
 }
 
-pub trait Processor {
+pub trait Processor<'a> {
     type Entry;
 
-    type Downloader: Downloader;
-    type Extractor: Extractor<Entry = Self::Entry>;
-    type Converter: Converter<Entry = Self::Entry>;
+    type Downloader: Downloader<'a>;
+    type Extractor: Extractor<'a, Entry = Self::Entry>;
+    type Converter: Converter<'a, Entry = Self::Entry>;
 
     fn new() -> anyhow::Result<Self>
     where
         Self: Sized;
 
-    async fn process(&self, term: &Term, language: Option<String>) -> anyhow::Result<Dictionary> {
+    async fn process(&self, language: &'a str) -> anyhow::Result<Dictionary> {
         let downloader = Self::Downloader::new(&language)?;
-        let extractor = Self::Extractor::new()?;
-        let mut converter = Self::Converter::new()?;
+        let extractor = Self::Extractor::new(&language)?;
+        let mut converter = Self::Converter::new(&language)?;
 
-        let frequency_map = match language {
-            Some(lang) => FrequencyMap::new(&lang, term).await?,
-            None => None,
-        };
+        // Yield to allow other tasks to start
+        tokio::task::yield_now().await;
 
-        let data = downloader.download(term).await?;
-        let parsed = extractor.extract(term, &data)?;
-        let dictionary = converter.convert(term, &frequency_map, &parsed)?;
+        let frequency_map = FrequencyMap::new(&language).await?;
+
+        // Yield after frequency map loading
+        tokio::task::yield_now().await;
+
+        let data = downloader.download().await?;
+
+        // Yield after download to allow other tasks to run during extraction
+        tokio::task::yield_now().await;
+
+        let parsed = extractor.extract(&data)?;
+
+        // Yield after extraction to allow other tasks to run during conversion
+        tokio::task::yield_now().await;
+
+        let dictionary = converter.convert(&frequency_map, &parsed)?;
 
         Ok(dictionary)
     }

@@ -5,11 +5,12 @@ mod downloader;
 mod extractor;
 mod schema;
 
+#[derive(Clone)]
 pub struct CEDictProcessor {}
 
-impl Processor for CEDictProcessor {
+impl<'a> Processor<'a> for CEDictProcessor {
     type Entry = schema::CEDictEntry;
-    type Downloader = downloader::CEDictDownloader;
+    type Downloader = downloader::CEDictDownloader<'a>;
     type Extractor = extractor::CEDictExtractor;
     type Converter = converter::CEDictConverter;
 

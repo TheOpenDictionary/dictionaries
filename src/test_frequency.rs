@@ -1,20 +1,16 @@
-use console::Term;
-
 use crate::frequency::FrequencyMap;
 
-pub async fn test_frequency(language: &str, word: &str, term: &Term) {
-    term.write_line(&format!(
+pub async fn test_frequency(language: &str, word: &str) {
+    println!(
         "🔍 Testing frequency for '{}' in language '{}'",
         word, language
-    ))
-    .unwrap();
+    );
 
-    match FrequencyMap::new(language, &term).await.unwrap() {
+    match FrequencyMap::new(language).await.unwrap() {
         Some(freq_map) => {
             match freq_map.get_frequency(word) {
                 Some(rank) => {
-                    term.write_line(&format!("✅ Word '{}' has frequency rank: {}", word, rank))
-                        .unwrap();
+                    println!("✅ Word '{}' has frequency rank: {}", word, rank);
 
                     // Convert rank to approximate proficiency level
                     let level = match rank {
@@ -25,21 +21,15 @@ pub async fn test_frequency(language: &str, word: &str, term: &Term) {
                         5001..=8000 => "C1",
                         _ => "C2+",
                     };
-                    term.write_line(&format!("📊 Approximate proficiency level: {}", level))
-                        .unwrap();
+                    println!("📊 Approximate proficiency level: {}", level);
                 }
                 None => {
-                    term.write_line(&format!("❌ Word '{}' not found in frequency data", word))
-                        .unwrap();
+                    println!("❌ Word '{}' not found in frequency data", word)
                 }
             }
         }
         None => {
-            term.write_line(&format!(
-                "❌ No frequency data available for language '{}'",
-                language
-            ))
-            .unwrap();
+            println!("❌ No frequency data available for language '{}'", language)
         }
     }
 

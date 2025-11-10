@@ -2,14 +2,14 @@ use crate::processors::traits::Downloader;
 
 use super::consts::SUPPORTED_LANGUAGES;
 
-pub struct WiktionaryDownloader {
-    pub language: String,
+pub struct WiktionaryDownloader<'a> {
+    pub language: &'a str,
 }
 
-impl Downloader for WiktionaryDownloader {
+impl<'a> Downloader<'a> for WiktionaryDownloader<'a> {
     fn url(&self) -> String {
         let languages = SUPPORTED_LANGUAGES;
-        let language = languages.get(self.language.as_str()).unwrap();
+        let language = languages.get(self.language).unwrap();
 
         format!(
             "https://kaikki.org/dictionary/{}/kaikki.org-dictionary-{}.jsonl",
@@ -17,20 +17,18 @@ impl Downloader for WiktionaryDownloader {
         )
     }
 
-    fn new(language: &Option<String>) -> anyhow::Result<Self>
+    fn language(&self) -> &'a str {
+        return self.language;
+    }
+
+    fn new(language: &'a str) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
-        if let Some(lang) = language {
-            if SUPPORTED_LANGUAGES.contains_key(lang.as_str()) {
-                Ok(Self {
-                    language: lang.clone(),
-                })
-            } else {
-                anyhow::bail!("Unsupported language: {}", lang);
-            }
+        if SUPPORTED_LANGUAGES.contains_key(language) {
+            Ok(Self { language })
         } else {
-            anyhow::bail!("A language is required for the Wiktionary downloader");
+            anyhow::bail!("Unsupported language: {}", language);
         }
     }
 }

@@ -1,18 +1,25 @@
-use console::Term;
 use rayon::prelude::*;
 use regex::Regex;
 
-use crate::{processors::traits::Extractor, progress::STYLE_PROGRESS, utils::decompress_gzip};
+use crate::{
+    output::{StyledPrefix, clear_line},
+    prefix_println,
+    processors::traits::Extractor,
+    progress::STYLE_PROGRESS,
+    utils::decompress_gzip,
+};
 
 use super::schema::CEDictEntry;
 
-pub struct CEDictExtractor {}
+pub struct CEDictExtractor {
+    prefix: String,
+}
 
-impl Extractor for CEDictExtractor {
+impl<'a> Extractor<'a> for CEDictExtractor {
     type Entry = CEDictEntry;
 
-    fn extract(&self, term: &Term, data: &Vec<u8>) -> anyhow::Result<Vec<CEDictEntry>> {
-        term.write_line("🔍 Extracting the dictionary...")?;
+    fn extract(&self, data: &Vec<u8>) -> anyhow::Result<Vec<CEDictEntry>> {
+        prefix_println!(self.prefix, "Extracting the dictionary...");
 
         let decompressed = String::from_utf8(decompress_gzip(data)?)?;
 
@@ -21,7 +28,8 @@ impl Extractor for CEDictExtractor {
             .filter(|line| !line.starts_with('#') && !line.is_empty())
             .collect();
 
-        let progress = indicatif::ProgressBar::new(lines.len() as u64);
+        let progress =
+            crate::progress::MULTI_PROGRESS.add(indicatif::ProgressBar::new(lines.len() as u64));
         progress.set_style(STYLE_PROGRESS.clone());
 
         let regex = Regex::new(r"(.*?)\s(.*?)\s\[(.*?)]\s/(.*)/").unwrap();
@@ -57,16 +65,19 @@ impl Extractor for CEDictExtractor {
 
         progress.finish_and_clear();
 
-        term.clear_last_lines(1)?;
-        term.write_line("✅ Extraction complete")?;
+        clear_line();
+
+        prefix_println!(self.prefix, "Extraction complete");
 
         Ok(results)
     }
 
-    fn new() -> anyhow::Result<Self>
+    fn new(language: &'a str) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
-        Ok(Self {})
+        Ok(Self {
+            prefix: language.styled_prefix(),
+        })
     }
 }

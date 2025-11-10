@@ -1,16 +1,15 @@
 use std::path::PathBuf;
 
-use crate::processors::wiktionary::SUPPORTED_LANGUAGES;
-
 use self::commands::Commands;
-use clap::{Parser, command};
-use console::Term;
+use clap::Parser;
 use processors::{CEDictProcessor, Processor, WiktionaryProcessor};
+use rayon::prelude::*;
 use utils::save_dictionary;
 
 mod args;
 mod commands;
 mod frequency;
+mod output;
 mod processors;
 mod progress;
 mod test_frequency;
@@ -22,31 +21,29 @@ mod utils;
 struct Cli {
     #[command(subcommand)]
     command: Commands,
-
-    #[arg(short, long, help = "Path to save the output dictionary file")]
-    output: Option<String>,
 }
 
 fn get_default_path(dictionary: &str, language: &str) -> PathBuf {
     format!("out/{}/{}.odict", dictionary, language).into()
 }
 
-async fn process_all<T: Processor>(
-    term: &Term,
+fn process_all<T: for<'a> Processor<'a> + Clone + Send + Sync>(
     processor: T,
     dictionary: &str,
     languages: Vec<&str>,
-) -> odict::Result<()> {
-    for language in languages {
-        let output_path = get_default_path(dictionary, language);
+) -> anyhow::Result<()> {
+    let dictionary = dictionary.to_string();
 
-        let dict = processor
-            .process(&Term::stdout(), Some(language.to_string()))
-            .await
-            .unwrap();
+    languages.par_iter().try_for_each(|language| {
+        let rt = tokio::runtime::Runtime::new()?;
+        let output_path = get_default_path(&dictionary, language);
 
-        save_dictionary(term, &dict, &output_path).unwrap();
-    }
+        let dict = rt.block_on(processor.process(language))?;
+
+        save_dictionary(language, &dict, &output_path)?;
+
+        Ok::<_, anyhow::Error>(())
+    })?;
 
     Ok(())
 }
@@ -54,54 +51,38 @@ async fn process_all<T: Processor>(
 #[tokio::main]
 async fn main() {
     let args = Cli::parse();
-    let term = Term::stdout();
-
-    let (dictionary_name, language) = match &args.command {
-        Commands::Wiktionary(wiktionary_args) => ("wiktionary", wiktionary_args.language.clone()),
-        Commands::CEDict => ("cedict", "zho-eng".to_string()),
-        Commands::TestFrequency { .. } => unreachable!(),
-    };
 
     match &args.command {
         Commands::TestFrequency { language, word } => {
-            test_frequency::test_frequency(language, word, &term).await
+            test_frequency::test_frequency(language, word).await
         }
-        _ => {
-            if let Commands::Wiktionary(wiktionary_args) = &args.command {
-                if wiktionary_args.language == "all" {
-                    process_all(
-                        &term,
-                        WiktionaryProcessor::new().unwrap(),
-                        dictionary_name,
-                        SUPPORTED_LANGUAGES.keys().cloned().collect(),
-                    )
-                    .await
-                    .unwrap();
+        Commands::CEDict => {
+            let dictionary = CEDictProcessor::new()
+                .unwrap()
+                .process("cmn")
+                .await
+                .unwrap();
 
-                    return;
+            let output_path = get_default_path("cedict", "zho-eng");
+            save_dictionary("cmn", &dictionary, &output_path).unwrap();
+        }
+        Commands::Wiktionary(wiktionary_args) => {
+            // Validate and expand language codes
+            let languages = match wiktionary_args.get_languages() {
+                Ok(langs) => langs,
+                Err(err) => {
+                    println!("{}", err);
+                    std::process::exit(1);
                 }
-            }
-
-            let dictionary = match &args.command {
-                Commands::Wiktionary(wiktionary_args) => WiktionaryProcessor::new()
-                    .unwrap()
-                    .process(&term, Some(wiktionary_args.language.clone()))
-                    .await
-                    .unwrap(),
-                Commands::CEDict => CEDictProcessor::new()
-                    .unwrap()
-                    .process(&term, Some("cmn".to_string()))
-                    .await
-                    .unwrap(),
-                Commands::TestFrequency { .. } => unreachable!(),
             };
 
-            let output_path: PathBuf = match &args.output {
-                Some(path) => path.clone().into(),
-                None => get_default_path(dictionary_name, &language),
-            };
-
-            save_dictionary(&term, &dictionary, &output_path).unwrap();
+            // Always use parallel processing for all languages
+            process_all(
+                WiktionaryProcessor::new().unwrap(),
+                "wiktionary",
+                languages.iter().map(|s| s.as_str()).collect(),
+            )
+            .unwrap();
         }
     }
 }
