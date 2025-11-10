@@ -1,13 +1,8 @@
 use std::collections::HashMap;
 
-use crate::{
-    frequency::FrequencyMap,
-    output::{StyledPrefix, clear_line},
-    prefix_println,
-    processors::traits::Converter,
-    progress::STYLE_PROGRESS,
-};
+use crate::{frequency::FrequencyMap, output::StyledPrefix, processors::traits::Converter};
 
+use indicatif::ProgressBar;
 use map_macro::{hash_map, hash_set};
 use odict::schema::{
     Definition, DefinitionType, Dictionary, Entry, EntryRef, Etymology, Form, Group, ID, MediaURL,
@@ -21,7 +16,6 @@ use super::{
 
 pub struct WiktionaryConverter {
     missing_pos: Vec<String>,
-    prefix: String,
 }
 
 impl WiktionaryConverter {
@@ -89,21 +83,19 @@ impl Into<Option<Pronunciation>> for &Sound {
     }
 }
 
-impl<'a> Converter<'a> for WiktionaryConverter {
+impl Converter for WiktionaryConverter {
     type Entry = WiktionaryEntry;
 
     fn convert(
         &mut self,
         frequency_map: &Option<FrequencyMap>,
         data: &Vec<WiktionaryEntry>,
+        progress: &ProgressBar,
     ) -> anyhow::Result<Dictionary> {
         self.missing_pos = vec![];
 
-        let progress =
-            crate::progress::MULTI_PROGRESS.add(indicatif::ProgressBar::new(data.len() as u64));
-
-        progress.set_style(STYLE_PROGRESS.clone());
-        progress.set_prefix(self.prefix.clone());
+        progress.set_position(0);
+        progress.set_length(data.len() as u64);
         progress.set_message("Converting the dictionary...");
 
         let mut entries: HashMap<String, Entry> = hash_map! {};
@@ -263,7 +255,7 @@ impl<'a> Converter<'a> for WiktionaryConverter {
             progress.inc(1);
         }
 
-        progress.finish_with_message("Conversion complete");
+        progress.set_message("Conversion complete");
 
         Ok(Dictionary {
             id: ID::new(),
@@ -272,12 +264,11 @@ impl<'a> Converter<'a> for WiktionaryConverter {
         })
     }
 
-    fn new(language: &'a str) -> anyhow::Result<Self>
+    fn new() -> anyhow::Result<Self>
     where
         Self: Sized,
     {
         Ok(Self {
-            prefix: language.styled_prefix(),
             missing_pos: vec![],
         })
     }

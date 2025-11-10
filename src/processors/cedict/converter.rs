@@ -1,38 +1,31 @@
 use std::collections::HashMap;
 
+use indicatif::ProgressBar;
 use map_macro::{hash_map, hash_set};
 use odict::schema::{
     Definition, DefinitionType, Dictionary, Entry, Etymology, Form, FormKind, ID, PartOfSpeech,
     Pronunciation, Sense,
 };
 
-use crate::{
-    frequency::FrequencyMap,
-    output::{StyledPrefix, clear_line},
-    prefix_println,
-    processors::traits::Converter,
-    progress::STYLE_PROGRESS,
-};
+use crate::{frequency::FrequencyMap, processors::traits::Converter, progress::STYLE_PROGRESS};
 
 use super::schema::CEDictEntry;
 
-pub struct CEDictConverter {
-    prefix: String,
-}
+pub struct CEDictConverter {}
 
-impl<'a> Converter<'a> for CEDictConverter {
+impl Converter for CEDictConverter {
     type Entry = CEDictEntry;
 
     fn convert(
         &mut self,
         frequency_map: &Option<FrequencyMap>,
         data: &Vec<CEDictEntry>,
+        progress: &ProgressBar,
     ) -> anyhow::Result<Dictionary> {
-        prefix_println!(self.prefix, "Converting the dictionary...");
-
-        let progress =
-            crate::progress::MULTI_PROGRESS.add(indicatif::ProgressBar::new(data.len() as u64));
+        progress.set_position(0);
         progress.set_style(STYLE_PROGRESS.clone());
+        progress.set_length(data.len() as u64);
+        progress.set_message("Converting the dictionary...");
 
         let mut entries: HashMap<String, Entry> = hash_map! {};
 
@@ -105,11 +98,7 @@ impl<'a> Converter<'a> for CEDictConverter {
             entries.insert(simplified, entry);
         }
 
-        progress.finish_and_clear();
-
-        clear_line();
-
-        prefix_println!(self.prefix, "Conversion complete");
+        progress.set_message("Conversion complete");
 
         Ok(Dictionary {
             id: ID::new(),
@@ -118,12 +107,10 @@ impl<'a> Converter<'a> for CEDictConverter {
         })
     }
 
-    fn new(language: &'a str) -> anyhow::Result<Self>
+    fn new() -> anyhow::Result<Self>
     where
         Self: Sized,
     {
-        Ok(Self {
-            prefix: language.styled_prefix(),
-        })
+        Ok(Self {})
     }
 }

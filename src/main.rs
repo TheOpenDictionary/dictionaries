@@ -1,10 +1,6 @@
-use std::path::PathBuf;
-
 use self::commands::Commands;
 use clap::Parser;
 use processors::{CEDictProcessor, Processor, WiktionaryProcessor};
-use rayon::prelude::*;
-use utils::save_dictionary;
 
 mod args;
 mod commands;
@@ -23,31 +19,6 @@ struct Cli {
     command: Commands,
 }
 
-fn get_default_path(dictionary: &str, language: &str) -> PathBuf {
-    format!("out/{}/{}.odict", dictionary, language).into()
-}
-
-fn process_all<T: for<'a> Processor<'a> + Clone + Send + Sync>(
-    processor: T,
-    dictionary: &str,
-    languages: Vec<&str>,
-) -> anyhow::Result<()> {
-    let dictionary = dictionary.to_string();
-
-    languages.par_iter().try_for_each(|language| {
-        let rt = tokio::runtime::Runtime::new()?;
-        let output_path = get_default_path(&dictionary, language);
-
-        let dict = rt.block_on(processor.process(language))?;
-
-        save_dictionary(language, &dict, &output_path)?;
-
-        Ok::<_, anyhow::Error>(())
-    })?;
-
-    Ok(())
-}
-
 #[tokio::main]
 async fn main() {
     let args = Cli::parse();
@@ -57,14 +28,11 @@ async fn main() {
             test_frequency::test_frequency(language, word).await
         }
         Commands::CEDict => {
-            let dictionary = CEDictProcessor::new()
+            CEDictProcessor::new()
                 .unwrap()
-                .process("cmn")
+                .process("cedict", &vec!["cmn"])
                 .await
                 .unwrap();
-
-            let output_path = get_default_path("cedict", "zho-eng");
-            save_dictionary("cmn", &dictionary, &output_path).unwrap();
         }
         Commands::Wiktionary(wiktionary_args) => {
             // Validate and expand language codes
@@ -77,12 +45,14 @@ async fn main() {
             };
 
             // Always use parallel processing for all languages
-            process_all(
-                WiktionaryProcessor::new().unwrap(),
-                "wiktionary",
-                languages.iter().map(|s| s.as_str()).collect(),
-            )
-            .unwrap();
+            WiktionaryProcessor::new()
+                .unwrap()
+                .process(
+                    "wiktionary",
+                    &languages.iter().map(|s| s.as_str()).collect(),
+                )
+                .await
+                .unwrap()
         }
     }
 }

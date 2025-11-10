@@ -2,10 +2,12 @@ mod hsk;
 
 use std::collections::HashMap;
 
+use console::style;
+use indicatif::ProgressBar;
+
 use crate::{
     frequency::{traits::FrequencyMapImpl, utils::map_to_ranks},
     output::StyledPrefix,
-    prefix_println,
 };
 
 #[derive(Debug, Clone)]
@@ -15,10 +17,9 @@ pub struct ChineseFrequencyMap {
 
 #[async_trait::async_trait(?Send)]
 impl<'a, 'b> FrequencyMapImpl<'a, 'b> for ChineseFrequencyMap {
-    async fn new(language: &'a str) -> anyhow::Result<Option<Self>> {
-        let prefix = language.styled_prefix();
-        let simplified = super::ost::get_subtitle_frequencies("zh_CN", &prefix).await?;
-        let traditional = super::ost::get_subtitle_frequencies("zh_TW", &prefix).await?;
+    async fn new(language: &'a str, progress: &ProgressBar) -> anyhow::Result<Option<Self>> {
+        let simplified = super::ost::get_subtitle_frequencies("zh_CN", &progress).await?;
+        let traditional = super::ost::get_subtitle_frequencies("zh_TW", &progress).await?;
 
         let mut ranks = traditional;
 
@@ -26,18 +27,21 @@ impl<'a, 'b> FrequencyMapImpl<'a, 'b> for ChineseFrequencyMap {
 
         ranks = map_to_ranks(&ranks);
 
-        match hsk::get_hsk_ranks().await {
+        match hsk::get_hsk_ranks(progress).await {
             Ok(hsk_map) => {
                 for (word, hsk_rank) in hsk_map.iter() {
                     ranks.insert(word.clone(), *hsk_rank);
                 }
             }
             Err(e) => {
-                prefix_println!(
-                    prefix,
-                    "⚠️ Failed to load HSK data ({}), falling back to OpenSubtitles only",
-                    e
-                );
+                progress.set_message(format!(
+                    "{}",
+                    style(format!(
+                        "Failed to load HSK data ({}), falling back to OpenSubtitles only",
+                        e
+                    ))
+                    .red()
+                ));
             }
         }
 

@@ -1,3 +1,5 @@
+use indicatif::ProgressBar;
+
 use crate::frequency::FrequencyMap;
 
 pub async fn test_frequency(language: &str, word: &str) {
@@ -6,7 +8,10 @@ pub async fn test_frequency(language: &str, word: &str) {
         word, language
     );
 
-    match FrequencyMap::new(language).await.unwrap() {
+    match FrequencyMap::new(language, &ProgressBar::new_spinner())
+        .await
+        .unwrap()
+    {
         Some(freq_map) => {
             match freq_map.get_frequency(word) {
                 Some(rank) => {

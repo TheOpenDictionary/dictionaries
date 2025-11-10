@@ -17,10 +17,6 @@ impl<'a> Downloader<'a> for WiktionaryDownloader<'a> {
         )
     }
 
-    fn language(&self) -> &'a str {
-        return self.language;
-    }
-
     fn new(language: &'a str) -> anyhow::Result<Self>
     where
         Self: Sized,

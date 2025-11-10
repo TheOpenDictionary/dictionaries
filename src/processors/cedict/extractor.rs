@@ -1,25 +1,20 @@
+use indicatif::ProgressBar;
 use rayon::prelude::*;
 use regex::Regex;
 
-use crate::{
-    output::{StyledPrefix, clear_line},
-    prefix_println,
-    processors::traits::Extractor,
-    progress::STYLE_PROGRESS,
-    utils::decompress_gzip,
-};
+use crate::{processors::traits::Extractor, utils::decompress_gzip};
 
 use super::schema::CEDictEntry;
 
-pub struct CEDictExtractor {
-    prefix: String,
-}
+pub struct CEDictExtractor {}
 
-impl<'a> Extractor<'a> for CEDictExtractor {
+impl Extractor for CEDictExtractor {
     type Entry = CEDictEntry;
 
-    fn extract(&self, data: &Vec<u8>) -> anyhow::Result<Vec<CEDictEntry>> {
-        prefix_println!(self.prefix, "Extracting the dictionary...");
+    fn extract(&self, data: &Vec<u8>, progress: &ProgressBar) -> anyhow::Result<Vec<CEDictEntry>> {
+        progress.set_position(0);
+        progress.set_length(data.len() as u64);
+        progress.set_message("Extracting the dictionary...");
 
         let decompressed = String::from_utf8(decompress_gzip(data)?)?;
 
@@ -27,10 +22,6 @@ impl<'a> Extractor<'a> for CEDictExtractor {
             .lines()
             .filter(|line| !line.starts_with('#') && !line.is_empty())
             .collect();
-
-        let progress =
-            crate::progress::MULTI_PROGRESS.add(indicatif::ProgressBar::new(lines.len() as u64));
-        progress.set_style(STYLE_PROGRESS.clone());
 
         let regex = Regex::new(r"(.*?)\s(.*?)\s\[(.*?)]\s/(.*)/").unwrap();
 
@@ -63,21 +54,15 @@ impl<'a> Extractor<'a> for CEDictExtractor {
             })
             .collect();
 
-        progress.finish_and_clear();
-
-        clear_line();
-
-        prefix_println!(self.prefix, "Extraction complete");
+        progress.set_message("Extraction complete");
 
         Ok(results)
     }
 
-    fn new(language: &'a str) -> anyhow::Result<Self>
+    fn new() -> anyhow::Result<Self>
     where
         Self: Sized,
     {
-        Ok(Self {
-            prefix: language.styled_prefix(),
-        })
+        Ok(Self {})
     }
 }

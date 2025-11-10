@@ -1,12 +1,12 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use console::Term;
+use indicatif::ProgressBar;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     frequency::utils::map_to_ranks_with_sort,
     output::StyledPrefix,
-    prefix_println,
+    progress,
     utils::{download_with_progress, hash_url, read_file, write_file},
 };
 
@@ -16,9 +16,7 @@ struct HskWord {
     q: u32,    // frequency score (lower = more common)
 }
 
-async fn get_hsk_level_data(level: u8) -> anyhow::Result<Vec<HskWord>> {
-    let prefix = "cmn".styled_prefix();
-
+async fn get_hsk_level_data(level: u8, progress: &ProgressBar) -> anyhow::Result<Vec<HskWord>> {
     let url = format!(
         "https://raw.githubusercontent.com/TheOpenDictionary/complete-hsk-vocabulary/refs/heads/main/wordlists/exclusive/new/{}.min.json",
         level
@@ -28,18 +26,15 @@ async fn get_hsk_level_data(level: u8) -> anyhow::Result<Vec<HskWord>> {
 
     let content = match read_file(&file_path)? {
         Some(content) => {
-            crate::progress::MULTI_PROGRESS
-                .println(format!(
-                    "{} Using cached HSK level {} data from {}",
-                    prefix,
-                    level,
-                    file_path.display()
-                ))
-                .ok();
+            progress.set_message(format!(
+                "Using cached HSK level {} data from {}",
+                level,
+                file_path.display()
+            ));
             content
         }
         None => {
-            let content = download_with_progress(&prefix, &url, &file_path).await?;
+            let content = download_with_progress(&progress, &url, &file_path).await?;
 
             write_file(&file_path, &content)?;
 
@@ -49,24 +44,21 @@ async fn get_hsk_level_data(level: u8) -> anyhow::Result<Vec<HskWord>> {
 
     let words: Vec<HskWord> = serde_json::from_slice(&content)?;
 
-    crate::progress::MULTI_PROGRESS
-        .println(format!(
-            "{} Loaded {} words from HSK level {}",
-            prefix,
-            words.len(),
-            level
-        ))
-        .ok();
+    progress.set_message(format!(
+        "Loaded {} words from HSK level {}",
+        words.len(),
+        level
+    ));
 
     Ok(words)
 }
 
-pub async fn get_hsk_ranks() -> anyhow::Result<HashMap<String, u32>> {
+pub async fn get_hsk_ranks(progress: &ProgressBar) -> anyhow::Result<HashMap<String, u32>> {
     // Load all 7 HSK levels and collect words with their level info
     let mut level_words: Vec<(String, u8, u32)> = Vec::new(); // (word, level, original_freq)
 
     for level in 1..=7 {
-        let words = get_hsk_level_data(level).await?;
+        let words = get_hsk_level_data(level, progress).await?;
 
         for word in words {
             level_words.push((word.s, level, word.q));

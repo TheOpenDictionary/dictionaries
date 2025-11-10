@@ -4,6 +4,8 @@ mod ost;
 mod traits;
 mod utils;
 
+use indicatif::ProgressBar;
+
 use crate::frequency::traits::FrequencyMapImpl;
 
 #[derive(Debug)]
@@ -12,12 +14,12 @@ pub struct FrequencyMap<'a, 'b> {
 }
 
 impl FrequencyMap<'_, '_> {
-    pub async fn new(language: &str) -> anyhow::Result<Option<Self>> {
+    pub async fn new(language: &str, progress: &ProgressBar) -> anyhow::Result<Option<Self>> {
         let map: Option<Box<dyn FrequencyMapImpl<'_, '_>>> = match language {
-            "cmn" => chinese::ChineseFrequencyMap::new(language)
+            "cmn" => chinese::ChineseFrequencyMap::new(language, progress)
                 .await?
                 .map(|f| Box::new(f) as Box<dyn FrequencyMapImpl<'_, '_>>),
-            _ => default::DefaultFrequencyMap::new(language)
+            _ => default::DefaultFrequencyMap::new(language, progress)
                 .await?
                 .map(|f| Box::new(f) as Box<dyn FrequencyMapImpl<'_, '_>>),
         };
