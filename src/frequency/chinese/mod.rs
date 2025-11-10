@@ -5,10 +5,7 @@ use std::collections::HashMap;
 use console::style;
 use indicatif::ProgressBar;
 
-use crate::{
-    frequency::{traits::FrequencyMapImpl, utils::map_to_ranks},
-    output::StyledPrefix,
-};
+use crate::frequency::{traits::FrequencyMapImpl, utils::map_to_ranks};
 
 #[derive(Debug, Clone)]
 pub struct ChineseFrequencyMap {
@@ -17,7 +14,7 @@ pub struct ChineseFrequencyMap {
 
 #[async_trait::async_trait(?Send)]
 impl<'a, 'b> FrequencyMapImpl<'a, 'b> for ChineseFrequencyMap {
-    async fn new(language: &'a str, progress: &ProgressBar) -> anyhow::Result<Option<Self>> {
+    async fn new(_language: &'a str, progress: &ProgressBar) -> anyhow::Result<Option<Self>> {
         let simplified = super::ost::get_subtitle_frequencies("zh_CN", &progress).await?;
         let traditional = super::ost::get_subtitle_frequencies("zh_TW", &progress).await?;
 

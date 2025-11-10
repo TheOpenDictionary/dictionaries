@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{frequency::FrequencyMap, output::StyledPrefix, processors::traits::Converter};
+use crate::{frequency::FrequencyMap, processors::traits::Converter};
 
 use indicatif::ProgressBar;
 use map_macro::{hash_map, hash_set};
@@ -86,21 +86,20 @@ impl Into<Option<Pronunciation>> for &Sound {
 impl Converter for WiktionaryConverter {
     type Entry = WiktionaryEntry;
 
-    fn convert(
+    fn convert<I>(
         &mut self,
         frequency_map: &Option<FrequencyMap>,
-        data: &Vec<WiktionaryEntry>,
+        entries_iter: I,
         progress: &ProgressBar,
-    ) -> anyhow::Result<Dictionary> {
+    ) -> anyhow::Result<Dictionary>
+    where
+        I: Iterator<Item = WiktionaryEntry>,
+    {
         self.missing_pos = vec![];
-
-        progress.set_position(0);
-        progress.set_length(data.len() as u64);
-        progress.set_message("Converting the dictionary...");
 
         let mut entries: HashMap<String, Entry> = hash_map! {};
 
-        for entry in data {
+        for entry in entries_iter {
             let pos = self.resolve_pos(&entry);
             let term = entry.word.to_owned();
             let see_also = entry.redirects.as_ref().map(|r| r[0].to_owned());
@@ -251,11 +250,8 @@ impl Converter for WiktionaryConverter {
                 }
             }
 
-            progress.set_message(term);
             progress.inc(1);
         }
-
-        progress.set_message("Conversion complete");
 
         Ok(Dictionary {
             id: ID::new(),

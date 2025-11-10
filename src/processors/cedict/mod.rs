@@ -10,7 +10,7 @@ pub struct CEDictProcessor {}
 
 impl<'a> Processor<'a> for CEDictProcessor {
     type Entry = schema::CEDictEntry;
-    type Downloader = downloader::CEDictDownloader<'a>;
+    type Downloader = downloader::CEDictDownloader;
     type Extractor = extractor::CEDictExtractor;
     type Converter = converter::CEDictConverter;
 

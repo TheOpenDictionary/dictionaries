@@ -21,7 +21,7 @@ impl<T: Display + AsRef<str>> StyledPrefix for T {
     fn styled_prefix(&self) -> String {
         let idx = self.as_ref().chars().map(|c| c as usize).sum::<usize>() % COLORS.len();
         format!(
-            "\x1b[0m{}",
+            "\x1b[0m[{}]",
             style(self).for_stderr().fg(COLORS[idx]).to_string()
         )
     }

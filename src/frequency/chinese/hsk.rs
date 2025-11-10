@@ -5,8 +5,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     frequency::utils::map_to_ranks_with_sort,
-    output::StyledPrefix,
-    progress,
     utils::{download_with_progress, hash_url, read_file, write_file},
 };
 
@@ -24,7 +22,7 @@ async fn get_hsk_level_data(level: u8, progress: &ProgressBar) -> anyhow::Result
 
     let file_path = PathBuf::from(".data").join(&hash_url(&url));
 
-    let content = match read_file(&file_path)? {
+    let content = match read_file(&file_path).await? {
         Some(content) => {
             progress.set_message(format!(
                 "Using cached HSK level {} data from {}",
@@ -36,7 +34,7 @@ async fn get_hsk_level_data(level: u8, progress: &ProgressBar) -> anyhow::Result
         None => {
             let content = download_with_progress(&progress, &url, &file_path).await?;
 
-            write_file(&file_path, &content)?;
+            write_file(&file_path, &content).await?;
 
             content
         }

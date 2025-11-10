@@ -7,7 +7,7 @@ use odict::schema::{
     Pronunciation, Sense,
 };
 
-use crate::{frequency::FrequencyMap, processors::traits::Converter, progress::STYLE_PROGRESS};
+use crate::{frequency::FrequencyMap, processors::traits::Converter};
 
 use super::schema::CEDictEntry;
 
@@ -16,22 +16,19 @@ pub struct CEDictConverter {}
 impl Converter for CEDictConverter {
     type Entry = CEDictEntry;
 
-    fn convert(
+    fn convert<I>(
         &mut self,
         frequency_map: &Option<FrequencyMap>,
-        data: &Vec<CEDictEntry>,
+        entries_iter: I,
         progress: &ProgressBar,
-    ) -> anyhow::Result<Dictionary> {
-        progress.set_position(0);
-        progress.set_style(STYLE_PROGRESS.clone());
-        progress.set_length(data.len() as u64);
-        progress.set_message("Converting the dictionary...");
-
+    ) -> anyhow::Result<Dictionary>
+    where
+        I: Iterator<Item = CEDictEntry>,
+    {
         let mut entries: HashMap<String, Entry> = hash_map! {};
 
-        for cedict_entry in data {
+        for cedict_entry in entries_iter {
             progress.inc(1);
-            progress.set_message(cedict_entry.simplified.clone());
 
             let simplified = cedict_entry.simplified.clone();
             let traditional = cedict_entry.traditional.clone();
@@ -97,8 +94,6 @@ impl Converter for CEDictConverter {
 
             entries.insert(simplified, entry);
         }
-
-        progress.set_message("Conversion complete");
 
         Ok(Dictionary {
             id: ID::new(),

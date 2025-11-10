@@ -27,12 +27,12 @@ pub async fn get_subtitle_frequencies(
     let data_dir = PathBuf::from(".data");
 
     if !data_dir.exists() {
-        std::fs::create_dir_all(&data_dir)?;
+        tokio::fs::create_dir_all(&data_dir).await?;
     }
 
     let file_path = data_dir.join(&hash_url(&url));
 
-    let content = match read_file(&file_path)? {
+    let content = match read_file(&file_path).await? {
         Some(content) => {
             progress.set_message(format!(
                 "Using cached frequency list from {}",
@@ -43,19 +43,17 @@ pub async fn get_subtitle_frequencies(
         None => {
             let content = download_with_progress(progress, &url, &file_path).await?;
 
-            write_file(&file_path, &content)?;
+            write_file(&file_path, &content).await?;
 
             content
         }
     };
 
-    let mut map = HashMap::new();
-
     let decoded = String::from_utf8(decompress_gzip(&content)?)?;
     let punctuation_regex = Regex::new(r"[^\p{L}]")?;
     let number_regex = Regex::new(r"^\d+$")?;
 
-    for line in decoded.lines() {
+    let map: HashMap<String, u32> = decoded.lines().fold(HashMap::new(), |mut m, line| {
         let parts: Vec<&str> = line.split_whitespace().collect();
 
         if parts.len() >= 2 {
@@ -66,16 +64,15 @@ pub async fn get_subtitle_frequencies(
 
                 // Skip punctuation and numbers
                 if !clean_word.is_empty() && !is_number {
-                    *map.entry(clean_word).or_insert(0) += frequency;
+                    *m.entry(clean_word).or_insert(0) += frequency;
                 }
             }
         }
-    }
 
-    progress.set_message(format!(
-        "Loaded subtitle frequency data for {} words",
-        map.len()
-    ));
+        m
+    });
+
+    progress.set_message(format!("Loaded frequency data for {} words", map.len()));
 
     Ok(map)
 }
