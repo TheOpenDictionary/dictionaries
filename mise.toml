@@ -1,2 +1,5 @@
 [task_config]
 includes = ["tasks.toml"]
+
+[tools]
+"cargo:cargo-edit" = "latest"

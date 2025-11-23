@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
-use console::Term;
+use indicatif::ProgressBar;
 use map_macro::{hash_map, hash_set};
 use odict::schema::{
     Definition, DefinitionType, Dictionary, Entry, Etymology, Form, FormKind, ID, PartOfSpeech,
     Pronunciation, Sense,
 };
 
-use crate::{frequency::FrequencyMap, processors::traits::Converter, progress::STYLE_PROGRESS};
+use crate::{frequency::FrequencyMap, processors::traits::Converter};
 
 use super::schema::CEDictEntry;
 
@@ -16,22 +16,19 @@ pub struct CEDictConverter {}
 impl Converter for CEDictConverter {
     type Entry = CEDictEntry;
 
-    fn convert(
+    fn convert<I>(
         &mut self,
-        term: &Term,
         frequency_map: &Option<FrequencyMap>,
-        data: &Vec<CEDictEntry>,
-    ) -> anyhow::Result<Dictionary> {
-        term.write_line("🔄 Converting the dictionary...")?;
-
-        let progress = indicatif::ProgressBar::new(data.len() as u64);
-        progress.set_style(STYLE_PROGRESS.clone());
-
+        entries_iter: I,
+        progress: &ProgressBar,
+    ) -> anyhow::Result<Dictionary>
+    where
+        I: Iterator<Item = CEDictEntry>,
+    {
         let mut entries: HashMap<String, Entry> = hash_map! {};
 
-        for cedict_entry in data {
+        for cedict_entry in entries_iter {
             progress.inc(1);
-            progress.set_message(cedict_entry.simplified.clone());
 
             let simplified = cedict_entry.simplified.clone();
             let traditional = cedict_entry.traditional.clone();
@@ -97,11 +94,6 @@ impl Converter for CEDictConverter {
 
             entries.insert(simplified, entry);
         }
-
-        progress.finish_and_clear();
-
-        term.clear_last_lines(1)?;
-        term.write_line("✅ Conversion complete")?;
 
         Ok(Dictionary {
             id: ID::new(),
