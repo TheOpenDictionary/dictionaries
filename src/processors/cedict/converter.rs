@@ -1,10 +1,11 @@
-use std::collections::HashMap;
-
 use indicatif::ProgressBar;
-use map_macro::{hash_map, hash_set};
-use odict::schema::{
-    Definition, DefinitionType, Dictionary, Entry, Etymology, Form, FormKind, ID, PartOfSpeech,
-    Pronunciation, Sense,
+use odict::{
+    entryset,
+    schema::{
+        Definition, DefinitionType, Dictionary, Entry, EntrySet, Etymology, Form, FormKind, ID,
+        PartOfSpeech, Pronunciation, Sense,
+    },
+    senseset,
 };
 
 use crate::{frequency::FrequencyMap, processors::traits::Converter};
@@ -25,7 +26,7 @@ impl Converter for CEDictConverter {
     where
         I: Iterator<Item = CEDictEntry>,
     {
-        let mut entries: HashMap<String, Entry> = hash_map! {};
+        let mut entries: EntrySet = entryset![];
 
         for cedict_entry in entries_iter {
             progress.inc(1);
@@ -65,7 +66,7 @@ impl Converter for CEDictConverter {
                 tags: vec![],
                 translations: vec![],
                 forms,
-                pos: PartOfSpeech::N, // Default to noun as most entries are nouns
+                pos: PartOfSpeech::Un,
                 definitions,
             };
 
@@ -78,27 +79,37 @@ impl Converter for CEDictConverter {
                     media: vec![],
                 }],
                 description: None,
-                senses: hash_set![sense],
+                senses: senseset![sense.clone()],
             };
 
-            // Add entry
-            let entry = Entry {
-                media: vec![],
-                rank: frequency_map
-                    .as_ref()
-                    .and_then(|m| m.get_frequency(&simplified)),
-                etymologies: vec![ety],
-                term: simplified.clone(),
-                see_also: None,
-            };
+            if let Some((index, existing_entry)) = entries.swap_remove_full(simplified.as_str()) {
+                let mut new_entry = existing_entry.clone();
 
-            entries.insert(simplified, entry);
+                // Add as a new etymology since CEDict doesn't have POS
+                // and senses would overwrite each other if in the same etymology
+                new_entry.etymologies.push(ety);
+
+                entries.shift_insert(index, new_entry);
+            } else {
+                // Create new entry
+                let entry = Entry {
+                    media: vec![],
+                    rank: frequency_map
+                        .as_ref()
+                        .and_then(|m| m.get_frequency(&simplified)),
+                    etymologies: vec![ety],
+                    term: simplified.clone(),
+                    see_also: None,
+                };
+
+                entries.insert(entry);
+            }
         }
 
         Ok(Dictionary {
             id: ID::new(),
             name: Some("CC-CEDICT".to_string()),
-            entries: entries.values().cloned().collect(),
+            entries: entries.clone(),
         })
     }
 

@@ -3,10 +3,13 @@ use std::collections::HashMap;
 use crate::{frequency::FrequencyMap, processors::traits::Converter};
 
 use indicatif::ProgressBar;
-use map_macro::{hash_map, hash_set};
-use odict::schema::{
-    Definition, DefinitionType, Dictionary, Entry, EntryRef, Etymology, Form, Group, ID, MediaURL,
-    PartOfSpeech, Pronunciation, PronunciationKind, Sense,
+use map_macro::hash_map;
+use odict::{
+    schema::{
+        Definition, DefinitionType, Dictionary, Entry, EntryRef, EntrySet, Etymology, Form, Group,
+        ID, MediaURL, PartOfSpeech, Pronunciation, PronunciationKind, Sense,
+    },
+    senseset,
 };
 
 use super::{
@@ -97,7 +100,7 @@ impl Converter for WiktionaryConverter {
     {
         self.missing_pos = vec![];
 
-        let mut entries: HashMap<String, Entry> = hash_map! {};
+        let mut entries: EntrySet = EntrySet::new();
 
         for entry in entries_iter {
             let pos = self.resolve_pos(&entry);
@@ -107,7 +110,7 @@ impl Converter for WiktionaryConverter {
             if matches!(pos, PartOfSpeech::Other(ref s) if s == "soft-redirect") {
                 // Create entry with see_also for soft-redirects, but no etymologies
                 if let Some(see_also_ref) = see_also {
-                    if !entries.contains_key(term.as_str()) {
+                    if !entries.contains(term.as_str()) {
                         let rank = frequency_map.as_ref().and_then(|m| m.get_frequency(&term));
                         let entry = Entry {
                             etymologies: vec![],
@@ -116,7 +119,7 @@ impl Converter for WiktionaryConverter {
                             media: vec![],
                             see_also: Some(EntryRef::from(see_also_ref)),
                         };
-                        entries.insert(term.clone(), entry);
+                        entries.insert(entry);
                     }
                 }
                 progress.inc(1);
@@ -214,40 +217,50 @@ impl Converter for WiktionaryConverter {
                 definitions: definitions.to_owned(),
             };
 
-            if let Some(ety) = entries
-                .get_mut(term.as_str())
-                .and_then(|e| e.etymologies.get_mut(etymology_number as usize - 1))
-            {
-                if let Some(sense) = ety.senses.get(&pos) {
-                    let mut new_sense = sense.clone();
-                    new_sense.definitions.append(&mut definitions);
-                    ety.senses.replace(new_sense);
+            let ety = Etymology {
+                id: None,
+                pronunciations,
+                description: etymology_text.to_owned(),
+                senses: senseset![sense.clone()],
+            };
+
+            if let Some(e) = entries.get(term.as_str()) {
+                let mut new_entry = e.clone();
+
+                if let Some(existing_ety) = e.etymologies.get(etymology_number as usize - 1) {
+                    let mut new_ety = existing_ety.clone();
+
+                    if let Some((index, sense)) = new_ety.senses.swap_remove_full(&pos) {
+                        let mut new_sense = sense.clone();
+                        new_sense.definitions.append(&mut definitions);
+                        new_ety.senses.shift_insert(index, new_sense);
+                    } else {
+                        new_ety.senses.insert(sense);
+                    }
+
+                    new_entry.etymologies[etymology_number as usize - 1] = new_ety;
+                    if let Some((index, _)) = entries.swap_remove_full(term.as_str()) {
+                        entries.shift_insert(index, new_entry);
+                    }
                 } else {
-                    ety.senses.insert(sense);
+                    let mut new_entry = e.clone();
+                    new_entry.etymologies.push(ety);
+                    if let Some((index, _)) = entries.swap_remove_full(term.as_str()) {
+                        entries.shift_insert(index, new_entry);
+                    }
                 }
             } else {
-                let ety = Etymology {
-                    id: None,
-                    pronunciations,
-                    description: etymology_text.to_owned(),
-                    senses: hash_set![sense],
+                let rank = frequency_map.as_ref().and_then(|m| m.get_frequency(&term));
+
+                let entry = Entry {
+                    etymologies: vec![ety],
+                    term: term.to_owned(),
+                    rank,
+                    media: vec![],
+                    see_also: see_also.map(|s| EntryRef::from(s)),
                 };
 
-                if let Some(entry) = entries.get_mut(term.as_str()) {
-                    entry.etymologies.push(ety);
-                } else {
-                    let rank = frequency_map.as_ref().and_then(|m| m.get_frequency(&term));
-
-                    let entry = Entry {
-                        etymologies: vec![ety],
-                        term: term.to_owned(),
-                        rank,
-                        media: vec![],
-                        see_also: see_also.map(|s| EntryRef::from(s)),
-                    };
-
-                    entries.insert(term.clone(), entry);
-                }
+                entries.insert(entry);
             }
 
             progress.inc(1);
@@ -256,7 +269,7 @@ impl Converter for WiktionaryConverter {
         Ok(Dictionary {
             id: ID::new(),
             name: None,
-            entries: entries.values().cloned().collect(),
+            entries: entries.clone(),
         })
     }
 
