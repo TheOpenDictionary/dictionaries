@@ -162,7 +162,8 @@ pub struct GramGrp {
     pub mood: Vec<Mood>,
 
     #[serde(default)]
-    pub iType: Vec<IType>,
+    #[serde(rename = "iType")]
+    pub i_type: Vec<IType>,
 
     #[serde(default)]
     pub gram: Vec<Gram>,
@@ -316,6 +317,9 @@ pub struct Usg {
 pub struct Cit {
     #[serde(rename = "@type", default)]
     pub cit_type: Option<String>,
+
+    #[serde(rename = "@xml:lang", default)]
+    pub lang: Option<String>,
 
     #[serde(default)]
     pub quote: Vec<Quote>,

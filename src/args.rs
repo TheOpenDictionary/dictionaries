@@ -1,6 +1,6 @@
 use clap::Args;
 
-use crate::processors::wiktionary::SUPPORTED_LANGUAGES;
+use crate::processors::{get_all_dictionary_names, wiktionary::SUPPORTED_LANGUAGES};
 
 #[derive(Debug, Args)]
 pub struct WiktionaryArgs {
@@ -45,6 +45,22 @@ impl WiktionaryArgs {
 
 #[derive(Debug, Args)]
 pub struct FreeDictArgs {
-    #[arg(help = "Language pair (e.g., 'eng-fra' for English-French)")]
-    pub language_pair: String,
+    #[arg(
+        required = true,
+        help = "Language pair(s) (e.g., 'eng-fra' for English-French), or 'all' for all dictionaries"
+    )]
+    pub languages: Vec<String>,
+}
+
+impl FreeDictArgs {
+    /// Returns the language pairs, with "all" expanded to all available FreeDict dictionaries.
+    pub async fn get_languages(&self) -> Result<Vec<String>, String> {
+        if self.languages.iter().any(|lang| lang == "all") {
+            get_all_dictionary_names()
+                .await
+                .map_err(|e| format!("Failed to fetch FreeDict dictionary list: {}", e))
+        } else {
+            Ok(self.languages.clone())
+        }
+    }
 }

@@ -2,8 +2,8 @@ use indicatif::ProgressBar;
 use odict::{
     entryset,
     schema::{
-        Definition, DefinitionType, Dictionary, Entry, EntryRef, EntrySet, Etymology, Form,
-        FormKind, ID, PartOfSpeech, Pronunciation, PronunciationKind, Sense,
+        Definition, DefinitionType, Dictionary, Entry, EntrySet, Etymology, ID, PartOfSpeech,
+        Pronunciation, PronunciationKind, Sense, SenseSet,
     },
     senseset,
 };
@@ -25,80 +25,137 @@ impl FreeDictConverter {
             "pron" | "pronoun" => PartOfSpeech::Pron,
             "prep" | "preposition" => PartOfSpeech::Prep,
             "conj" | "conjunction" => PartOfSpeech::Conj,
-            "interj" | "interjection" => PartOfSpeech::Interj,
+            "interj" | "interjection" => PartOfSpeech::Intj,
             "det" | "determiner" => PartOfSpeech::Det,
             "num" | "numeral" | "number" => PartOfSpeech::Num,
             "part" | "particle" => PartOfSpeech::Part,
             "art" | "article" => PartOfSpeech::Art,
-            "suffix" => PartOfSpeech::Suffix,
-            "prefix" => PartOfSpeech::Prefix,
+            "suffix" => PartOfSpeech::Suff,
+            "prefix" => PartOfSpeech::Pref,
             "phrase" => PartOfSpeech::Phr,
             "" => PartOfSpeech::Un,
             other => PartOfSpeech::Other(other.to_string()),
         }
     }
 
-    /// Extract definitions and translations from a TEI sense recursively
-    fn process_sense(
-        tei_sense: &TEISense,
-        definitions: &mut Vec<DefinitionType>,
-        translations: &mut Vec<String>,
-    ) {
-        // Extract translations from cit elements
-        for cit in &tei_sense.cit {
+    /// Extract translations from a TEI sense recursively.
+    /// For bilingual dictionaries, translations (cit type="trans") are the actual definitions.
+    fn collect_translations(sense: &TEISense, translations: &mut Vec<String>) {
+        for cit in &sense.cit {
             if cit.cit_type.as_deref() == Some("trans") {
                 for quote in &cit.quote {
-                    let translation = quote.content.trim();
-                    if !translation.is_empty() {
-                        translations.push(translation.to_string());
+                    let text = quote.content.trim();
+                    if !text.is_empty() {
+                        translations.push(text.to_string());
                     }
                 }
             }
         }
 
-        // Extract definitions from def elements
-        for def in &tei_sense.def {
-            let def_text = def.content.trim();
-            if !def_text.is_empty() {
-                definitions.push(DefinitionType::Definition(Definition {
-                    id: None,
-                    value: def_text.to_string(),
-                    examples: vec![],
-                    notes: vec![],
-                }));
-            }
-        }
-
-        // Process nested senses recursively
-        for nested_sense in &tei_sense.sense {
-            Self::process_sense(nested_sense, definitions, translations);
+        for nested in &sense.sense {
+            Self::collect_translations(nested, translations);
         }
     }
 
-    /// Create an ODICT sense from TEI entry data
-    fn create_sense(
-        entry: &FreeDictEntry,
-        tei_sense: &TEISense,
-        pos: PartOfSpeech,
-    ) -> Option<Sense> {
-        let mut definitions = Vec::new();
-        let mut translations = Vec::new();
+    /// Extract pronunciations from entry forms
+    fn extract_pronunciations(entry: &FreeDictEntry) -> Vec<Pronunciation> {
+        let mut pronunciations = Vec::new();
 
-        Self::process_sense(tei_sense, &mut definitions, &mut translations);
+        for form in &entry.form {
+            for pron in &form.pron {
+                let value = pron.content.trim();
+                if value.is_empty() {
+                    continue;
+                }
 
-        // If we have no definitions and no translations, skip this sense
-        if definitions.is_empty() && translations.is_empty() {
-            return None;
+                let kind = if value.starts_with('/') || value.starts_with('[') {
+                    Some(PronunciationKind::IPA)
+                } else {
+                    None
+                };
+
+                pronunciations.push(Pronunciation {
+                    value: value.to_string(),
+                    kind,
+                    media: vec![],
+                });
+            }
         }
 
-        Some(Sense {
-            lemma: None,
-            tags: vec![],
-            translations,
-            forms: vec![],
-            pos,
-            definitions,
+        pronunciations
+    }
+
+    /// Extract the headword from an entry
+    fn extract_headword(entry: &FreeDictEntry) -> Option<String> {
+        entry
+            .form
+            .first()
+            .and_then(|f| f.orth.first())
+            .map(|o| o.content.trim().to_string())
+            .filter(|s| !s.is_empty())
+    }
+
+    /// Extract POS from gramGrp elements
+    fn extract_pos(gram_grps: &[super::schema::tei::GramGrp]) -> PartOfSpeech {
+        gram_grps
+            .first()
+            .and_then(|g| g.pos.first())
+            .map(|p| Self::parse_pos(&p.content))
+            .unwrap_or(PartOfSpeech::Un)
+    }
+
+    /// Create a definition from a translation string
+    fn make_definition(value: String) -> DefinitionType {
+        DefinitionType::Definition(Definition {
+            id: None,
+            value,
+            examples: vec![],
+            notes: vec![],
         })
+    }
+
+    /// Add translations to a SenseSet, grouping by POS
+    fn add_translations_to_senseset(
+        sense_set: &mut SenseSet,
+        pos: PartOfSpeech,
+        translations: Vec<String>,
+    ) {
+        if translations.is_empty() {
+            return;
+        }
+
+        // Check if we already have a sense with this POS
+        if let Some((idx, existing)) = sense_set.swap_remove_full(&pos) {
+            // Merge definitions into existing sense
+            let mut updated = existing.clone();
+            for t in translations {
+                updated.definitions.push(Self::make_definition(t));
+            }
+            sense_set.shift_insert(idx, updated);
+        } else {
+            // Create new sense
+            let definitions = translations
+                .into_iter()
+                .map(Self::make_definition)
+                .collect();
+            sense_set.insert(Sense {
+                lemma: None,
+                tags: vec![],
+                translations: vec![],
+                forms: vec![],
+                pos,
+                definitions,
+            });
+        }
+    }
+
+    /// Process TEI senses and add to SenseSet
+    fn process_senses(sense_set: &mut SenseSet, senses: &[TEISense], pos: PartOfSpeech) {
+        for sense in senses {
+            let mut translations = Vec::new();
+            Self::collect_translations(sense, &mut translations);
+            Self::add_translations_to_senseset(sense_set, pos.clone(), translations);
+        }
     }
 }
 
@@ -128,119 +185,55 @@ impl Converter for FreeDictConverter {
         for tei_entry in entries {
             progress.inc(1);
 
-            // Extract the headword (orthographic form)
-            let headword = if let Some(form) = tei_entry.form.first() {
-                if let Some(orth) = form.orth.first() {
-                    orth.content.trim().to_string()
-                } else {
-                    continue; // Skip entries without headword
-                }
-            } else {
-                continue; // Skip entries without form
+            let headword = match Self::extract_headword(&tei_entry) {
+                Some(h) => h,
+                None => continue,
             };
 
-            // Skip empty headwords
-            if headword.is_empty() {
-                continue;
-            }
+            let pronunciations = Self::extract_pronunciations(&tei_entry);
+            let default_pos = Self::extract_pos(&tei_entry.gram_grp);
 
-            // Extract pronunciations
-            let mut pronunciations = Vec::new();
-            for form in &tei_entry.form {
-                for pron in &form.pron {
-                    let pron_value = pron.content.trim();
-                    if !pron_value.is_empty() {
-                        // Determine pronunciation kind based on content
-                        let kind = if pron_value.starts_with('/') && pron_value.ends_with('/') {
-                            // IPA pronunciation (usually marked with slashes)
-                            Some(PronunciationKind::IPA)
-                        } else if pron_value.starts_with('[') && pron_value.ends_with(']') {
-                            // Also IPA (alternative notation)
-                            Some(PronunciationKind::IPA)
-                        } else {
-                            None
-                        };
+            let mut sense_set: SenseSet = senseset![];
 
-                        pronunciations.push(Pronunciation {
-                            value: pron_value.to_string(),
-                            kind,
-                            media: vec![],
-                        });
-                    }
-                }
-            }
+            // Process entry-level senses
+            Self::process_senses(&mut sense_set, &tei_entry.sense, default_pos.clone());
 
-            // Extract part of speech
-            let pos = if let Some(gram_grp) = tei_entry.gram_grp.first() {
-                if let Some(pos_elem) = gram_grp.pos.first() {
-                    Self::parse_pos(&pos_elem.content)
-                } else {
-                    PartOfSpeech::Un
-                }
-            } else {
-                PartOfSpeech::Un
-            };
-
-            // Process senses
-            let mut senses = Vec::new();
-            for tei_sense in &tei_entry.sense {
-                if let Some(sense) = Self::create_sense(&tei_entry, tei_sense, pos.clone()) {
-                    senses.push(sense);
-                }
-            }
-
-            // Process homographs (hom elements)
+            // Process homographs (hom elements) - these may have their own POS
             for hom in &tei_entry.hom {
-                let hom_pos = if let Some(gram_grp) = hom.gram_grp.first() {
-                    if let Some(pos_elem) = gram_grp.pos.first() {
-                        Self::parse_pos(&pos_elem.content)
-                    } else {
-                        pos.clone()
-                    }
+                let hom_pos = Self::extract_pos(&hom.gram_grp);
+                let pos = if hom_pos == PartOfSpeech::Un {
+                    default_pos.clone()
                 } else {
-                    pos.clone()
+                    hom_pos
                 };
-
-                for tei_sense in &hom.sense {
-                    if let Some(sense) = Self::create_sense(&tei_entry, tei_sense, hom_pos.clone())
-                    {
-                        senses.push(sense);
-                    }
-                }
+                Self::process_senses(&mut sense_set, &hom.sense, pos);
             }
 
-            // Skip entries with no senses
-            if senses.is_empty() {
+            if sense_set.is_empty() {
                 continue;
             }
 
-            // Create etymology
             let etymology = Etymology {
                 id: None,
                 pronunciations,
                 description: None,
-                senses: senseset![senses],
+                senses: sense_set,
             };
 
-            // Check if entry already exists
-            if let Some((index, existing_entry)) = odict_entries.swap_remove_full(headword.as_str())
-            {
-                let mut new_entry = existing_entry.clone();
-                new_entry.etymologies.push(etymology);
-                odict_entries.shift_insert(index, new_entry);
+            if let Some((index, existing)) = odict_entries.swap_remove_full(headword.as_str()) {
+                let mut updated = existing.clone();
+                updated.etymologies.push(etymology);
+                odict_entries.shift_insert(index, updated);
             } else {
-                // Create new entry
-                let entry = Entry {
+                odict_entries.insert(Entry {
                     media: vec![],
                     rank: frequency_map
                         .as_ref()
                         .and_then(|m| m.get_frequency(&headword)),
                     etymologies: vec![etymology],
-                    term: headword.clone(),
+                    term: headword,
                     see_also: None,
-                };
-
-                odict_entries.insert(entry);
+                });
             }
         }
 

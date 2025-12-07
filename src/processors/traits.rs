@@ -93,6 +93,14 @@ pub trait Processor<'a> {
     where
         Self: Sized;
 
+    /// Extract the language code used for frequency map lookups.
+    /// By default, returns the language as-is.
+    /// Override this for processors like FreeDict where the language is a pair (e.g., "eng-spa")
+    /// and only the first language should be used for frequency lookups.
+    fn get_frequency_language(language: &str) -> String {
+        language.to_string()
+    }
+
     async fn process(&self, dictionary: &str, languages: &'a Vec<&str>) -> anyhow::Result<()> {
         let tasks: Vec<_> = languages
             .iter()
@@ -111,7 +119,8 @@ pub trait Processor<'a> {
                     let extractor = Self::Extractor::new()?;
                     let mut converter = Self::Converter::new()?;
 
-                    let frequency_map = FrequencyMap::new(language, &progress).await?;
+                    let freq_language = Self::get_frequency_language(language);
+                    let frequency_map = FrequencyMap::new(&freq_language, &progress).await?;
                     let data = downloader.download(&progress).await?;
 
                     progress.set_style(STYLE_PROGRESS.clone());

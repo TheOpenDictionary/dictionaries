@@ -35,14 +35,21 @@ async fn main() {
                 .unwrap();
         }
         Commands::FreeDict(freedict_args) => {
+            let languages = match freedict_args.get_languages().await {
+                Ok(langs) => langs,
+                Err(err) => {
+                    println!("{}", err);
+                    std::process::exit(1);
+                }
+            };
+
             FreeDictProcessor::new()
                 .unwrap()
-                .process("freedict", &vec![freedict_args.language_pair.as_str()])
+                .process("freedict", &languages.iter().map(|s| s.as_str()).collect())
                 .await
                 .unwrap();
         }
         Commands::Wiktionary(wiktionary_args) => {
-            // Validate and expand language codes
             let languages = match wiktionary_args.get_languages() {
                 Ok(langs) => langs,
                 Err(err) => {
@@ -51,7 +58,6 @@ async fn main() {
                 }
             };
 
-            // Always use parallel processing for all languages
             WiktionaryProcessor::new()
                 .unwrap()
                 .process(
