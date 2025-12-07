@@ -1,46 +1,87 @@
 use map_macro::hash_map;
-use odict::PartOfSpeech;
+use odict::schema::PartOfSpeech;
 use std::{collections::HashMap, sync::LazyLock};
 
 pub const SUPPORTED_LANGUAGES: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     hash_map! {
+        "ara" => "Arabic",
+        "aze" => "Azerbaijani",
+        "bul" => "Bulgarian",
+        "cat" => "Catalan",
+        "ceb" => "Cebuano",
+        "ces" => "Czech",
+        "cmn" => "Chinese",
+        "ell" => "Greek",
         "eng" => "English",
         "fra" => "French",
         "ger" => "German",
+        "gle" => "Irish",
+        "heb" => "Hebrew",
+        "hin" => "Hindi",
+        "hun" => "Hungarian",
+        "hye" => "Armenian",
         "ita" => "Italian",
+        "jpn" => "Japanese",
+        "kor" => "Korean",
+        "lat" => "Latin",
+        "lav" => "Latvian",
+        "lit" => "Lithuanian",
+        "mar" => "Marathi",
+        "nld" => "Dutch",
         "pol" => "Polish",
+        "por" => "Portuguese",
+        "ron" => "Romanian",
+        "rus" => "Russian",
         "spa" => "Spanish",
         "swe" => "Swedish",
-        "jpn" => "Japanese",
-        "rus" => "Russian",
-        "ara" => "Arabic",
-        "cmn" => "Chinese"
+        "tam" => "Tamil",
+        "tel" => "Telugu",
+        "tgl" => "Tagalog",
+        "tur" => "Turkish",
+        "ukr" => "Ukrainian",
+        "urd" => "Urdu",
+        "vie" => "Vietnamese",
     }
 });
 
 pub const POS_MAP: LazyLock<HashMap<&str, PartOfSpeech>> = LazyLock::new(|| {
     hash_map! {
-      "abbrev" => PartOfSpeech::abv,
-      "adv_phrase" => PartOfSpeech::phr_adv,
-      "affix" => PartOfSpeech::aff,
-      "article" => PartOfSpeech::art,
-      "character" => PartOfSpeech::chr,
-      "circumpos" => PartOfSpeech::un,  // TODO: fix this? ger
-      "combining_form" => PartOfSpeech::un,  // TODO: fix this? eng
-      "romanization" => PartOfSpeech::un,  // TODO: fix this? jap
-      "contraction" => PartOfSpeech::contr,
-      "circumfix" => PartOfSpeech::cf,
-      "infix" => PartOfSpeech::inf,
-      "interfix" => PartOfSpeech::intf,
-      "noun" => PartOfSpeech::n,
-      "particle" => PartOfSpeech::part,
-      "phrase" => PartOfSpeech::phr,
-      "prefix" => PartOfSpeech::pref,
-      "prep_phrase" => PartOfSpeech::phr_prep,
-      "proverb" => PartOfSpeech::prov,
-      "punct" => PartOfSpeech::punc,
-      "suffix" => PartOfSpeech::suff,
-      "symbol" => PartOfSpeech::sym,
-      "verb" => PartOfSpeech::v
+        // Core parts of speech
+        "adj" => PartOfSpeech::Adj,
+        "adv" => PartOfSpeech::Adv,
+        "noun" => PartOfSpeech::N,
+        "verb" => PartOfSpeech::V,
+        "pron" => PartOfSpeech::Pron,
+        "conj" => PartOfSpeech::Conj,
+        "prep" => PartOfSpeech::Prep,
+        "intj" => PartOfSpeech::Intj,
+        "det" => PartOfSpeech::Det,
+        "num" => PartOfSpeech::Num,
+        "name" => PartOfSpeech::Propn,
+
+        // Abbreviations and contractions
+        "abbrev" => PartOfSpeech::Abv,
+        "contraction" => PartOfSpeech::Contr,
+
+        // Affixes and morphemes
+        "affix" => PartOfSpeech::Aff,
+        "prefix" => PartOfSpeech::Pref,
+        "suffix" => PartOfSpeech::Suff,
+        "infix" => PartOfSpeech::Inf,
+        "interfix" => PartOfSpeech::Intf,
+        "circumfix" => PartOfSpeech::Cf,
+
+        // Phrases
+        "phrase" => PartOfSpeech::Phr,
+        "adv_phrase" => PartOfSpeech::PhrAdj,
+        "prep_phrase" => PartOfSpeech::PhrPrep,
+
+        // Special characters and symbols
+        "article" => PartOfSpeech::Art,
+        "character" => PartOfSpeech::Chr,
+        "punct" => PartOfSpeech::Punc,
+        "symbol" => PartOfSpeech::Sym,
+        "proverb" => PartOfSpeech::Prov,
+        "particle" => PartOfSpeech::Part
     }
 });

@@ -4,17 +4,17 @@ use serde_json::from_slice;
 
 use crate::processors::{freedict::schema::database::Platform, traits::Downloader};
 
-pub struct FreeDictDownloader {
-    language_pair: Option<String>,
+pub struct FreeDictDownloader<'a> {
+    language: &'a str,
 }
 
 #[async_trait(?Send)]
-impl Downloader for FreeDictDownloader {
-    fn new(language_pair: Option<String>) -> anyhow::Result<Self>
+impl<'a> Downloader<'a> for FreeDictDownloader<'a> {
+    fn new(language: &'a str) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
-        Ok(Self { language_pair })
+        Ok(Self { language })
     }
 
     async fn url(&self) -> anyhow::Result<String> {
@@ -27,7 +27,7 @@ impl Downloader for FreeDictDownloader {
             from_slice(database.as_bytes()).context("Failed to parse JSON")?;
 
         for entry in &json {
-            if entry.name == self.language_pair {
+            if entry.name.as_ref() == Some(&self.language.to_string()) {
                 if let Some(release) = entry
                     .releases
                     .as_ref()

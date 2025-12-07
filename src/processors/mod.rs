@@ -1,6 +1,7 @@
 mod cedict;
 mod freedict;
 mod traits;
+
 pub mod wiktionary;
 
 pub use cedict::CEDictProcessor;

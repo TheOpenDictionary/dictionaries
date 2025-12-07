@@ -1,7 +1,7 @@
 use std::io::Read;
 
 use anyhow::Context;
-use console::Term;
+use indicatif::ProgressBar;
 use liblzma::read::XzDecoder;
 use quick_xml::de::from_str;
 use tar::Archive;
@@ -22,10 +22,14 @@ impl Extractor for FreeDictExtractor {
         Ok(Self {})
     }
 
-    fn extract(&self, term: &Term, data: &Vec<u8>) -> anyhow::Result<Vec<Self::Entry>> {
-        term.write_line("🔍 Extracting dictionary data from archive...")?;
+    fn extract<'a>(
+        &self,
+        data: &'a [u8],
+        progress: &'a ProgressBar,
+    ) -> anyhow::Result<Box<dyn Iterator<Item = Self::Entry> + 'a>> {
+        progress.set_message("🔍 Extracting dictionary data from archive...");
 
-        let decoder = XzDecoder::new(&data[..]);
+        let decoder = XzDecoder::new(data);
 
         let mut archive = Archive::new(decoder);
 
@@ -41,7 +45,7 @@ impl Extractor for FreeDictExtractor {
 
                 let entries: TEI = from_str(&contents).context("Failed to parse TEI XML")?;
 
-                return Ok(entries.text.body.entries);
+                return Ok(Box::new(entries.text.body.entries.into_iter()));
             }
         }
 

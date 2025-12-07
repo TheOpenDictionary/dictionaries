@@ -1,15 +1,14 @@
-use std::path::PathBuf;
-
 use self::commands::Commands;
 use clap::{Parser, command};
-use console::Term;
 use processors::{CEDictProcessor, FreeDictProcessor, Processor, WiktionaryProcessor};
-use utils::save_dictionary;
 
 mod args;
 mod commands;
+mod frequency;
+mod output;
 mod processors;
 mod progress;
+mod test_frequency;
 mod utils;
 
 #[derive(Debug, Parser)]
@@ -18,50 +17,49 @@ mod utils;
 struct Cli {
     #[command(subcommand)]
     command: Commands,
-
-    #[arg(short, long, help = "Path to save the output dictionary file")]
-    output: Option<String>,
 }
 
 #[tokio::main]
 async fn main() {
     let args = Cli::parse();
-    let term = Term::stdout();
 
-    let dictionary = match &args.command {
-        Commands::Wiktionary(wiktionary_args) => WiktionaryProcessor::new()
-            .unwrap()
-            .process(&term, Some(wiktionary_args.language.clone()))
-            .await
-            .unwrap(),
-        Commands::CEDict => CEDictProcessor::new()
-            .unwrap()
-            .process(&term, None)
-            .await
-            .unwrap(),
-        Commands::FreeDict(freedict_args) => FreeDictProcessor::new()
-            .unwrap()
-            .process(&term, freedict_args.language_pair.clone())
-            .await
-            .unwrap(),
-    };
-
-    let (command_name, language) = match &args.command {
-        Commands::Wiktionary(wiktionary_args) => ("wiktionary", wiktionary_args.language.clone()),
-        Commands::CEDict => ("cedict", "zho-eng".to_string()),
-        Commands::FreeDict(freedict_args) => {
-            let language_pair = freedict_args
-                .language_pair
-                .clone()
-                .unwrap_or("all".to_string());
-            ("freedict", language_pair)
+    match &args.command {
+        Commands::TestFrequency { language, word } => {
+            test_frequency::test_frequency(language, word).await
         }
-    };
+        Commands::CEDict => {
+            CEDictProcessor::new()
+                .unwrap()
+                .process("cedict", &vec!["cmn"])
+                .await
+                .unwrap();
+        }
+        Commands::FreeDict(freedict_args) => {
+            FreeDictProcessor::new()
+                .unwrap()
+                .process("freedict", &vec![freedict_args.language_pair.as_str()])
+                .await
+                .unwrap();
+        }
+        Commands::Wiktionary(wiktionary_args) => {
+            // Validate and expand language codes
+            let languages = match wiktionary_args.get_languages() {
+                Ok(langs) => langs,
+                Err(err) => {
+                    println!("{}", err);
+                    std::process::exit(1);
+                }
+            };
 
-    let output_path: PathBuf = match &args.output {
-        Some(path) => path.clone().into(),
-        None => format!("out/{}/{}.odict", command_name, language).into(),
-    };
-
-    save_dictionary(term, &dictionary, &output_path).unwrap();
+            // Always use parallel processing for all languages
+            WiktionaryProcessor::new()
+                .unwrap()
+                .process(
+                    "wiktionary",
+                    &languages.iter().map(|s| s.as_str()).collect(),
+                )
+                .await
+                .unwrap()
+        }
+    }
 }

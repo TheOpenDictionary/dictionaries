@@ -1,10 +1,14 @@
-use std::collections::HashMap;
+use indicatif::ProgressBar;
+use odict::{
+    entryset,
+    schema::{
+        Definition, DefinitionType, Dictionary, Entry, EntrySet, Etymology, Form, FormKind, ID,
+        PartOfSpeech, Pronunciation, Sense,
+    },
+    senseset,
+};
 
-use console::Term;
-use map_macro::hash_map;
-use odict::{Definition, DefinitionType, Dictionary, Entry, Etymology, ID, PartOfSpeech, Sense};
-
-use crate::{processors::traits::Converter, progress::STYLE_PROGRESS};
+use crate::{frequency::FrequencyMap, processors::traits::Converter};
 
 use super::schema::CEDictEntry;
 
@@ -13,17 +17,19 @@ pub struct CEDictConverter {}
 impl Converter for CEDictConverter {
     type Entry = CEDictEntry;
 
-    fn convert(&mut self, term: &Term, data: &Vec<CEDictEntry>) -> anyhow::Result<Dictionary> {
-        term.write_line("🔄 Converting the dictionary...")?;
+    fn convert<I>(
+        &mut self,
+        frequency_map: &Option<FrequencyMap>,
+        entries_iter: I,
+        progress: &ProgressBar,
+    ) -> anyhow::Result<Dictionary>
+    where
+        I: Iterator<Item = CEDictEntry>,
+    {
+        let mut entries: EntrySet = entryset![];
 
-        let progress = indicatif::ProgressBar::new(data.len() as u64);
-        progress.set_style(STYLE_PROGRESS.clone());
-
-        let mut entries: HashMap<String, Entry> = hash_map! {};
-
-        for cedict_entry in data {
+        for cedict_entry in entries_iter {
             progress.inc(1);
-            progress.set_message(cedict_entry.simplified.clone());
 
             let simplified = cedict_entry.simplified.clone();
             let traditional = cedict_entry.traditional.clone();
@@ -31,12 +37,14 @@ impl Converter for CEDictConverter {
 
             // Create forms for traditional characters if different from simplified
             let mut forms = vec![];
-            // if traditional != simplified {
-            //     forms.push(Form {
-            //         term: traditional.into(),
-            //         kind: Some("traditional".to_string()),
-            //     });
-            // }
+
+            if traditional != simplified {
+                forms.push(Form {
+                    tags: vec![],
+                    term: traditional.into(),
+                    kind: Some(FormKind::Other("Traditional".to_string())),
+                });
+            }
 
             // Create definitions
             let definitions = cedict_entry
@@ -54,41 +62,54 @@ impl Converter for CEDictConverter {
 
             // Create sense with noun part of speech (CEDict doesn't specify POS)
             let sense = Sense {
-                pos: PartOfSpeech::n, // Default to noun as most entries are nouns
+                lemma: None,
+                tags: vec![],
+                translations: vec![],
+                forms,
+                pos: PartOfSpeech::Un,
                 definitions,
             };
 
             // Create etymology with pronunciation
             let ety = Etymology {
                 id: None,
-                pronunciation: Some(pronunciation),
+                pronunciations: vec![Pronunciation {
+                    value: pronunciation.clone(),
+                    kind: odict::schema::PronunciationKind::Pinyin.into(),
+                    media: vec![],
+                }],
                 description: None,
-                senses: hash_map! {
-                    PartOfSpeech::n => sense,
-                },
+                senses: senseset![sense.clone()],
             };
 
-            // Add entry
-            let entry = Entry {
-                etymologies: vec![ety],
-                term: simplified.clone(),
-                forms,
-                lemma: None,
-                see_also: None,
-            };
+            if let Some((index, existing_entry)) = entries.swap_remove_full(simplified.as_str()) {
+                let mut new_entry = existing_entry.clone();
 
-            entries.insert(simplified, entry);
+                // Add as a new etymology since CEDict doesn't have POS
+                // and senses would overwrite each other if in the same etymology
+                new_entry.etymologies.push(ety);
+
+                entries.shift_insert(index, new_entry);
+            } else {
+                // Create new entry
+                let entry = Entry {
+                    media: vec![],
+                    rank: frequency_map
+                        .as_ref()
+                        .and_then(|m| m.get_frequency(&simplified)),
+                    etymologies: vec![ety],
+                    term: simplified.clone(),
+                    see_also: None,
+                };
+
+                entries.insert(entry);
+            }
         }
-
-        progress.finish_and_clear();
-
-        term.clear_last_lines(1)?;
-        term.write_line("✅ Conversion complete")?;
 
         Ok(Dictionary {
             id: ID::new(),
             name: Some("CC-CEDICT".to_string()),
-            entries,
+            entries: entries.clone(),
         })
     }
 

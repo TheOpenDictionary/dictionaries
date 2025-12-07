@@ -41,7 +41,7 @@ pub struct WiktionaryEntry {
     pub etymology_number: Option<u32>,
     /// Descendants of the word
     #[serde(default)]
-    pub descendants: Vec<Descendant>,
+    pub descendants: Vec<WordLink>,
     /// Non-disambiguated synonyms
     #[serde(default)]
     pub synonyms: Vec<WordLink>,
@@ -68,7 +68,7 @@ pub struct WiktionaryEntry {
     pub coordinate_terms: Vec<WordLink>,
     /// Non-disambiguated Wikidata identifier
     #[serde(default)]
-    pub wikidata: Option<String>,
+    pub wikidata: Vec<String>,
     /// Non-disambiguated Wikipedia page title
     #[serde(default)]
     pub wikipedia: Option<Vec<String>>,
@@ -214,6 +214,8 @@ pub struct Sound {
     /// Rhymes information
     #[serde(default)]
     pub rhymes: Option<String>,
+    #[serde(default)]
+    pub zh_pron: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -222,7 +224,8 @@ pub struct Translation {
     #[serde(default)]
     pub alt: Option<String>,
     /// Wiktionary language code
-    pub code: String,
+    #[serde(default)]
+    pub code: Option<String>,
     /// English text clarifying the target sense
     #[serde(default)]
     pub english: Option<String>,
@@ -257,16 +260,6 @@ pub struct Template {
     /// Expanded template text
     #[serde(default)]
     pub expansion: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Descendant {
-    /// Level of indentation
-    pub depth: u32,
-    /// Templates on the line
-    pub templates: Vec<Template>,
-    /// Expanded and cleaned line text
-    pub text: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

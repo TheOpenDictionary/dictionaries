@@ -1,14 +1,21 @@
 use std::collections::HashMap;
 
-use crate::{processors::traits::Converter, progress::STYLE_PROGRESS};
-use console::Term;
+use crate::{frequency::FrequencyMap, processors::traits::Converter};
+
+use indicatif::ProgressBar;
 use map_macro::hash_map;
 use odict::{
-    Definition, DefinitionType, Dictionary, Entry, EntryRef, Etymology, Form, Group, ID,
-    PartOfSpeech, Sense,
+    schema::{
+        Definition, DefinitionType, Dictionary, Entry, EntryRef, EntrySet, Etymology, Form, Group,
+        ID, MediaURL, PartOfSpeech, Pronunciation, PronunciationKind, Sense,
+    },
+    senseset,
 };
 
-use super::{consts::POS_MAP, schema::WiktionaryEntry};
+use super::{
+    consts::POS_MAP,
+    schema::{Sound, WiktionaryEntry},
+};
 
 pub struct WiktionaryConverter {
     missing_pos: Vec<String>,
@@ -16,56 +23,132 @@ pub struct WiktionaryConverter {
 
 impl WiktionaryConverter {
     fn resolve_pos<'a>(&mut self, entry: &WiktionaryEntry) -> PartOfSpeech {
-        let mut pos = PartOfSpeech::un;
-
-        if let Some(resolved_pos) = entry
-            .pos
-            .as_ref()
-            .and_then(|p| POS_MAP.get(p.as_str()).cloned())
-        {
-            pos = resolved_pos;
-        } else if let Some(pos_value) = &entry.pos {
-            if !self.missing_pos.contains(pos_value) {
-                self.missing_pos.push(pos_value.clone());
+        if let Some(pos_value) = &entry.pos {
+            // Try to get the mapped PartOfSpeech from POS_MAP
+            if let Some(resolved_pos) = POS_MAP.get(pos_value.as_str()).cloned() {
+                return resolved_pos;
+            } else {
+                // If not found in the map, use PartOfSpeech::Other with the original value
+                if !self.missing_pos.contains(pos_value) {
+                    self.missing_pos.push(pos_value.clone());
+                }
+                return PartOfSpeech::Other(pos_value.clone());
             }
         }
 
-        pos
+        // Default to Unknown if no POS is provided
+        PartOfSpeech::Un
+    }
+}
+
+impl Into<Option<Pronunciation>> for &Sound {
+    fn into(self) -> Option<Pronunciation> {
+        // Only support Pinyin and IPA right now
+        if self.ipa.is_none() && self.zh_pron.is_none() {
+            return None;
+        }
+
+        let media = vec![&self.mp3_url, &self.ogg_url]
+            .into_iter()
+            .filter_map(|u| u.to_owned())
+            .map(|url| MediaURL {
+                src: url.clone(),
+                mime_type: if url.ends_with(".ogg") {
+                    Some("audio/ogg".to_string())
+                } else if url.ends_with(".mp3") {
+                    Some("audio/mp3".to_string())
+                } else {
+                    None
+                },
+                ..MediaURL::default()
+            })
+            .collect::<Vec<MediaURL>>();
+
+        if let Some(ipa) = &self.ipa {
+            return Pronunciation {
+                kind: Some(PronunciationKind::IPA),
+                value: ipa.to_owned(),
+                media,
+            }
+            .into();
+        } else if let Some(zh_pron) = &self.zh_pron {
+            if self.tags.contains(&"Pinyin".to_string()) {
+                return Pronunciation {
+                    kind: Some(PronunciationKind::Pinyin),
+                    value: zh_pron.to_owned(),
+                    media,
+                }
+                .into();
+            }
+        }
+
+        None
     }
 }
 
 impl Converter for WiktionaryConverter {
     type Entry = WiktionaryEntry;
 
-    fn convert(&mut self, term: &Term, data: &Vec<WiktionaryEntry>) -> anyhow::Result<Dictionary> {
-        term.write_line("🔄 Converting the dictionary...")?;
-
+    fn convert<I>(
+        &mut self,
+        frequency_map: &Option<FrequencyMap>,
+        entries_iter: I,
+        progress: &ProgressBar,
+    ) -> anyhow::Result<Dictionary>
+    where
+        I: Iterator<Item = WiktionaryEntry>,
+    {
         self.missing_pos = vec![];
 
-        let progress = indicatif::ProgressBar::new(data.len() as u64);
+        let mut entries: EntrySet = EntrySet::new();
 
-        progress.set_style(STYLE_PROGRESS.clone());
-
-        let mut entries: HashMap<String, Entry> = hash_map! {};
-
-        for entry in data {
+        for entry in entries_iter {
             let pos = self.resolve_pos(&entry);
             let term = entry.word.to_owned();
             let see_also = entry.redirects.as_ref().map(|r| r[0].to_owned());
+
+            if matches!(pos, PartOfSpeech::Other(ref s) if s == "soft-redirect") {
+                // Create entry with see_also for soft-redirects, but no etymologies
+                if let Some(see_also_ref) = see_also {
+                    if !entries.contains(term.as_str()) {
+                        let rank = frequency_map.as_ref().and_then(|m| m.get_frequency(&term));
+                        let entry = Entry {
+                            etymologies: vec![],
+                            term: term.to_owned(),
+                            rank,
+                            media: vec![],
+                            see_also: Some(EntryRef::from(see_also_ref)),
+                        };
+                        entries.insert(entry);
+                    }
+                }
+                progress.inc(1);
+                continue;
+            }
+
             let etymology_text = entry.etymology_text.to_owned();
-            let forms = entry
-                .forms
+            let pronunciations = entry
+                .sounds
                 .iter()
-                .map(|form| Form {
-                    term: form.form.to_owned().into(),
-                    kind: None,
-                })
-                .collect::<Vec<_>>();
+                .map(|s| s.to_owned())
+                .filter_map(|s| s.into())
+                .collect::<Vec<odict::schema::Pronunciation>>();
 
             let mut definitions: Vec<DefinitionType> = vec![];
             let mut group_map: HashMap<String, usize> = hash_map! {};
 
+            let mut lemma: Option<EntryRef> = None;
+            let mut tags: Vec<String> = vec![];
+
             for sense in &entry.senses {
+                tags.extend(sense.tags.iter().cloned());
+
+                if sense.form_of.len() > 0 {
+                    if let Some(fo) = &sense.form_of.get(0) {
+                        lemma = Some(EntryRef::from(fo.word.to_owned()));
+                    }
+                }
+
                 // Glosses with 2 senses typically have subdefinitions
                 if sense.glosses.len() == 2 {
                     let parent = sense.glosses[0].to_owned();
@@ -108,58 +191,85 @@ impl Converter for WiktionaryConverter {
 
             let etymology_number = entry.etymology_number.unwrap_or(1);
 
+            let forms = entry
+                .forms
+                .iter()
+                .map(|f| Form {
+                    kind: None,
+                    term: EntryRef::from(f.form.to_owned()),
+                    tags: f.tags.to_owned(),
+                })
+                .collect();
+
+            // Only create a sense if there are definitions
+            // (empty senses from soft-redirects should not be added)
+            if definitions.is_empty() {
+                progress.inc(1);
+                continue;
+            }
+
             let sense = Sense {
                 pos: pos.to_owned(),
+                lemma: lemma.to_owned(),
+                tags,
+                translations: vec![],
+                forms,
                 definitions: definitions.to_owned(),
             };
 
-            if let Some(ety) = entries
-                .get_mut(&term)
-                .and_then(|e| e.etymologies.get_mut(etymology_number as usize - 1))
-            {
-                if let Some(sense) = ety.senses.get_mut(&pos) {
-                    sense.definitions.append(&mut definitions);
+            let ety = Etymology {
+                id: None,
+                pronunciations,
+                description: etymology_text.to_owned(),
+                senses: senseset![sense.clone()],
+            };
+
+            if let Some(e) = entries.get(term.as_str()) {
+                let mut new_entry = e.clone();
+
+                if let Some(existing_ety) = e.etymologies.get(etymology_number as usize - 1) {
+                    let mut new_ety = existing_ety.clone();
+
+                    if let Some((index, sense)) = new_ety.senses.swap_remove_full(&pos) {
+                        let mut new_sense = sense.clone();
+                        new_sense.definitions.append(&mut definitions);
+                        new_ety.senses.shift_insert(index, new_sense);
+                    } else {
+                        new_ety.senses.insert(sense);
+                    }
+
+                    new_entry.etymologies[etymology_number as usize - 1] = new_ety;
+                    if let Some((index, _)) = entries.swap_remove_full(term.as_str()) {
+                        entries.shift_insert(index, new_entry);
+                    }
                 } else {
-                    ety.senses.insert(pos, sense);
+                    let mut new_entry = e.clone();
+                    new_entry.etymologies.push(ety);
+                    if let Some((index, _)) = entries.swap_remove_full(term.as_str()) {
+                        entries.shift_insert(index, new_entry);
+                    }
                 }
             } else {
-                let ety = Etymology {
-                    id: None,
-                    pronunciation: None,
-                    description: etymology_text.to_owned(),
-                    senses: hash_map! {
-                        pos.to_owned() => sense,
-                    },
+                let rank = frequency_map.as_ref().and_then(|m| m.get_frequency(&term));
+
+                let entry = Entry {
+                    etymologies: vec![ety],
+                    term: term.to_owned(),
+                    rank,
+                    media: vec![],
+                    see_also: see_also.map(|s| EntryRef::from(s)),
                 };
 
-                if let Some(entry) = entries.get_mut(&term) {
-                    entry.etymologies.push(ety);
-                } else {
-                    let entry = Entry {
-                        etymologies: vec![ety],
-                        term: term.to_owned(),
-                        forms,
-                        lemma: None,
-                        see_also: see_also.map(|s| EntryRef::from(s)),
-                    };
-
-                    entries.insert(term.to_owned(), entry);
-                }
+                entries.insert(entry);
             }
 
-            progress.set_message(term);
             progress.inc(1);
         }
-
-        progress.finish_and_clear();
-
-        term.clear_last_lines(1)?;
-        term.write_line("✅ Conversion complete")?;
 
         Ok(Dictionary {
             id: ID::new(),
             name: None,
-            entries,
+            entries: entries.clone(),
         })
     }
 

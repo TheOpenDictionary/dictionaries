@@ -3,13 +3,13 @@ use super::Processor;
 mod converter;
 mod downloader;
 mod extractor;
-mod schema;
+pub mod schema;
 
 pub struct FreeDictProcessor {}
 
-impl Processor for FreeDictProcessor {
+impl<'a> Processor<'a> for FreeDictProcessor {
     type Entry = schema::tei::Entry;
-    type Downloader = downloader::FreeDictDownloader;
+    type Downloader = downloader::FreeDictDownloader<'a>;
     type Extractor = extractor::FreeDictExtractor;
     type Converter = converter::FreeDictConverter;
 

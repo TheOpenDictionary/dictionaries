@@ -10,4 +10,11 @@ pub enum Commands {
     CEDict,
     #[command(name = "freedict")]
     FreeDict(FreeDictArgs),
+    #[command(name = "test-freq")]
+    TestFrequency {
+        #[arg(help = "Language code (e.g., cmn for Chinese)")]
+        language: String,
+        #[arg(help = "Word to test frequency for")]
+        word: String,
+    },
 }

@@ -1,98 +1,68 @@
-use async_trait::async_trait;
-use console::Term;
-use odict::Dictionary;
-use sha2::{Digest, Sha256};
-use std::fs::{self, File};
-use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
-use crate::progress::STYLE_DOWNLOAD;
+use async_trait::async_trait;
+use futures::future::try_join_all;
+use indicatif::ProgressBar;
+use odict::schema::Dictionary;
+
+use crate::{
+    frequency::FrequencyMap,
+    output::StyledPrefix,
+    progress::{MULTI_PROGRESS, STYLE_PROGRESS, STYLE_SPINNER},
+    utils::{download_with_progress, hash_url, read_file, save_dictionary, write_file},
+};
 
 #[async_trait(?Send)]
-pub trait Downloader {
-    fn new(language: Option<String>) -> anyhow::Result<Self>
+pub trait Downloader<'a> {
+    fn new(language: &'a str) -> anyhow::Result<Self>
     where
         Self: Sized;
 
     async fn url(&self) -> anyhow::Result<String>;
 
-    async fn download(&self, term: &Term) -> anyhow::Result<Vec<u8>> {
-        // let url = self.url().await?;
-        let url = "google.com".to_string();
-        // Create .data directory if it doesn't exist
+    async fn download(&self, progress: &ProgressBar) -> anyhow::Result<Vec<u8>> {
+        let url = self.url().await?;
         let data_dir = PathBuf::from(".data");
 
         if !data_dir.exists() {
-            fs::create_dir_all(&data_dir)?;
+            tokio::fs::create_dir_all(&data_dir).await?;
         }
 
-        // Create a filename based on URL hash
-        let mut hasher = Sha256::new();
+        let file_path = &data_dir.join(&hash_url(&url));
 
-        hasher.update(url.as_bytes());
+        let content = match read_file(&file_path).await? {
+            Some(content) => {
+                progress.set_message(format!(
+                    "Using cached dictionary from {}",
+                    file_path.display()
+                ));
+                content
+            }
+            None => {
+                let content = download_with_progress(progress, &url, &file_path).await?;
 
-        // let filename = format!("{:x}", hasher.finalize());
-        // let file_path = data_dir.join(&filename);
-        let file_path = PathBuf::from("/Users/tjnickerson/Downloads/eng-fra.src.tar.xz");
-        // If file exists, read and return it
-        if file_path.exists() {
-            term.write_line(
-                format!("✅ Using cached dictionary from {}", file_path.display()).as_str(),
-            )?;
+                write_file(&file_path, &content).await?;
 
-            let mut file = File::open(&file_path)?;
-            let mut content = Vec::new();
-
-            file.read_to_end(&mut content)?;
-
-            return Ok(content);
-        }
-
-        let mut response = reqwest::get(&url).await?;
-
-        if !response.status().is_success() {
-            anyhow::bail!("Failed to download file: {}", response.status());
-        }
-
-        let total_size = response.content_length().unwrap_or(0);
-
-        term.write_line(format!("⬇️ Downloading the dictionary from {}...", url).as_str())?;
-
-        let pb = indicatif::ProgressBar::new(total_size);
-
-        pb.set_style(STYLE_DOWNLOAD.clone());
-
-        // Download chunks and update progress bar
-        let mut downloaded: u64 = 0;
-        let mut content = Vec::new();
-
-        while let Some(chunk) = response.chunk().await? {
-            content.extend_from_slice(&chunk);
-            downloaded = std::cmp::min(downloaded + (chunk.len() as u64), total_size);
-            pb.set_position(downloaded);
-        }
-
-        pb.finish_and_clear();
-
-        term.clear_line()?;
-        term.write_line("✅ Download complete")?;
-
-        // Cache the downloaded content
-        let mut file = File::create(&file_path)?;
-        file.write_all(&content)?;
+                content
+            }
+        };
 
         Ok(content)
     }
 }
 
 pub trait Extractor {
-    type Entry;
+    type Entry: Send;
 
     fn new() -> anyhow::Result<Self>
     where
         Self: Sized;
 
-    fn extract(&self, term: &Term, data: &Vec<u8>) -> anyhow::Result<Vec<Self::Entry>>;
+    fn extract<'a>(
+        &self,
+        data: &'a [u8],
+        progress: &'a ProgressBar,
+    ) -> anyhow::Result<Box<dyn Iterator<Item = Self::Entry> + 'a>>;
 }
 
 pub trait Converter {
@@ -102,13 +72,20 @@ pub trait Converter {
     where
         Self: Sized;
 
-    fn convert(&mut self, term: &Term, data: &Vec<Self::Entry>) -> anyhow::Result<Dictionary>;
+    fn convert<I>(
+        &mut self,
+        frequency_map: &Option<FrequencyMap>,
+        entries: I,
+        progress: &ProgressBar,
+    ) -> anyhow::Result<Dictionary>
+    where
+        I: Iterator<Item = Self::Entry>;
 }
 
-pub trait Processor {
+pub trait Processor<'a> {
     type Entry;
 
-    type Downloader: Downloader;
+    type Downloader: Downloader<'a>;
     type Extractor: Extractor<Entry = Self::Entry>;
     type Converter: Converter<Entry = Self::Entry>;
 
@@ -116,15 +93,45 @@ pub trait Processor {
     where
         Self: Sized;
 
-    async fn process(&self, term: &Term, language: Option<String>) -> anyhow::Result<Dictionary> {
-        let downloader = Self::Downloader::new(language)?;
-        let extractor = Self::Extractor::new()?;
-        let mut converter = Self::Converter::new()?;
+    async fn process(&self, dictionary: &str, languages: &'a Vec<&str>) -> anyhow::Result<()> {
+        let tasks: Vec<_> = languages
+            .iter()
+            .map(|&language| {
+                let dictionary = dictionary.to_string();
 
-        let data = downloader.download(term).await?;
-        let parsed = extractor.extract(term, &data)?;
-        let dictionary = converter.convert(term, &parsed)?;
+                async move {
+                    let output_path = crate::utils::get_default_path(&dictionary, language);
+                    let progress = MULTI_PROGRESS.add(ProgressBar::new_spinner());
 
-        Ok(dictionary)
+                    progress.enable_steady_tick(Duration::from_millis(100));
+                    progress.set_style(STYLE_SPINNER.clone());
+                    progress.set_prefix(language.styled_prefix());
+
+                    let downloader = Self::Downloader::new(language)?;
+                    let extractor = Self::Extractor::new()?;
+                    let mut converter = Self::Converter::new()?;
+
+                    let frequency_map = FrequencyMap::new(language, &progress).await?;
+                    let data = downloader.download(&progress).await?;
+
+                    progress.set_style(STYLE_PROGRESS.clone());
+                    progress.set_position(0);
+                    progress.set_message("Processing entries...");
+
+                    let entries = extractor.extract(&data, &progress)?;
+                    let dict = converter.convert(&frequency_map, entries, &progress)?;
+
+                    save_dictionary(&dict, &output_path, &progress).await?;
+
+                    anyhow::Ok(())
+                }
+            })
+            .collect();
+
+        try_join_all(tasks).await?;
+
+        MULTI_PROGRESS.clear()?;
+
+        Ok(())
     }
 }
