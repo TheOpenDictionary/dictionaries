@@ -3,7 +3,9 @@ use std::{collections::HashMap, path::PathBuf};
 use indicatif::ProgressBar;
 use regex::Regex;
 
-use crate::utils::{decompress_gzip, download_with_progress, hash_url, read_file, write_file};
+use crate::utils::{
+    DATA_DIR, decompress_gzip, download_with_progress, hash_url, read_file, write_file,
+};
 
 fn get_source(_language_code: &str) -> &str {
     return "OpenSubtitles";
@@ -24,7 +26,7 @@ pub async fn get_subtitle_frequencies(
         language_code
     );
 
-    let data_dir = PathBuf::from(".data");
+    let data_dir = PathBuf::from(DATA_DIR);
 
     if !data_dir.exists() {
         tokio::fs::create_dir_all(&data_dir).await?;

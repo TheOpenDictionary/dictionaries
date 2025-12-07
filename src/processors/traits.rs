@@ -1,7 +1,7 @@
 use std::{path::PathBuf, time::Duration};
 
 use async_trait::async_trait;
-use futures::future::try_join_all;
+use futures::future::join_all;
 use indicatif::ProgressBar;
 use odict::schema::Dictionary;
 
@@ -9,7 +9,7 @@ use crate::{
     frequency::FrequencyMap,
     output::StyledPrefix,
     progress::{MULTI_PROGRESS, STYLE_PROGRESS, STYLE_SPINNER},
-    utils::{download_with_progress, hash_url, read_file, save_dictionary, write_file},
+    utils::{DATA_DIR, download_with_progress, hash_url, read_file, save_dictionary, write_file},
 };
 
 #[async_trait(?Send)]
@@ -22,7 +22,7 @@ pub trait Downloader<'a> {
 
     async fn download(&self, progress: &ProgressBar) -> anyhow::Result<Vec<u8>> {
         let url = self.url().await?;
-        let data_dir = PathBuf::from(".data");
+        let data_dir = PathBuf::from(DATA_DIR);
 
         if !data_dir.exists() {
             tokio::fs::create_dir_all(&data_dir).await?;
@@ -115,29 +115,46 @@ pub trait Processor<'a> {
                     progress.set_style(STYLE_SPINNER.clone());
                     progress.set_prefix(language.styled_prefix());
 
-                    let downloader = Self::Downloader::new(language)?;
-                    let extractor = Self::Extractor::new()?;
-                    let mut converter = Self::Converter::new()?;
+                    let result: anyhow::Result<()> = async {
+                        let downloader = Self::Downloader::new(language)?;
+                        let extractor = Self::Extractor::new()?;
+                        let mut converter = Self::Converter::new()?;
 
-                    let freq_language = Self::get_frequency_language(language);
-                    let frequency_map = FrequencyMap::new(&freq_language, &progress).await?;
-                    let data = downloader.download(&progress).await?;
+                        let freq_language = Self::get_frequency_language(language);
+                        let frequency_map = FrequencyMap::new(&freq_language, &progress).await?;
+                        let data = downloader.download(&progress).await?;
 
-                    progress.set_style(STYLE_PROGRESS.clone());
-                    progress.set_position(0);
-                    progress.set_message("Processing entries...");
+                        progress.set_style(STYLE_PROGRESS.clone());
+                        progress.set_position(0);
+                        progress.set_message("Processing entries...");
 
-                    let entries = extractor.extract(&data, &progress)?;
-                    let dict = converter.convert(&frequency_map, entries, &progress)?;
+                        let entries = extractor.extract(&data, &progress)?;
+                        let dict = converter.convert(&frequency_map, entries, &progress)?;
 
-                    save_dictionary(&dict, &output_path, &progress).await?;
+                        save_dictionary(&dict, &output_path, &progress).await?;
 
-                    anyhow::Ok(())
+                        Ok(())
+                    }
+                    .await;
+
+                    match &result {
+                        Ok(_) => {
+                            progress.finish_with_message("✅ Complete");
+                        }
+                        Err(e) => {
+                            progress.finish_with_message(format!(
+                                "❌ Failed to convert dictionary: {}",
+                                e
+                            ));
+                        }
+                    }
+
+                    (language, result)
                 }
             })
             .collect();
 
-        try_join_all(tasks).await?;
+        join_all(tasks).await;
 
         MULTI_PROGRESS.clear()?;
 

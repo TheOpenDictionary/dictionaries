@@ -10,6 +10,9 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::progress::{STYLE_DOWNLOAD, STYLE_SPINNER};
 
+/// Directory for caching downloaded files
+pub const DATA_DIR: &str = ".data";
+
 pub async fn save_dictionary<'a>(
     dictionary: &odict::schema::Dictionary,
     output_path: &PathBuf,

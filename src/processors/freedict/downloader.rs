@@ -1,16 +1,45 @@
+use std::path::PathBuf;
+
 use anyhow::Context;
 use async_trait::async_trait;
 use serde_json::from_slice;
+use tokio::sync::OnceCell;
 
 use super::schema::database::{Platform, WelcomeElement};
 use crate::processors::traits::Downloader;
+use crate::utils::{DATA_DIR, hash_url, read_file, write_file};
 
 const FREEDICT_DATABASE_URL: &str = "https://freedict.org/freedict-database.json";
 
-/// Fetches and parses the FreeDict database JSON.
-async fn fetch_database() -> anyhow::Result<Vec<WelcomeElement>> {
-    let database = reqwest::get(FREEDICT_DATABASE_URL).await?.text().await?;
-    from_slice(database.as_bytes()).context("Failed to parse FreeDict database JSON")
+/// Global cache for the FreeDict database to prevent concurrent downloads.
+static DATABASE_CACHE: OnceCell<Vec<WelcomeElement>> = OnceCell::const_new();
+
+/// Fetches and parses the FreeDict database JSON, using cache if available.
+/// Uses OnceCell to ensure only one download occurs even with concurrent calls.
+async fn fetch_database() -> anyhow::Result<&'static Vec<WelcomeElement>> {
+    DATABASE_CACHE
+        .get_or_try_init(|| async {
+            let data_dir = PathBuf::from(DATA_DIR);
+
+            if !data_dir.exists() {
+                tokio::fs::create_dir_all(&data_dir).await?;
+            }
+
+            let file_path = data_dir.join(hash_url(FREEDICT_DATABASE_URL));
+
+            let content = match read_file(&file_path).await? {
+                Some(content) => content,
+                None => {
+                    let response = reqwest::get(FREEDICT_DATABASE_URL).await?.bytes().await?;
+                    let content = response.to_vec();
+                    write_file(&file_path, &content).await?;
+                    content
+                }
+            };
+
+            from_slice(&content).context("Failed to parse FreeDict database JSON")
+        })
+        .await
 }
 
 /// Check if an entry has a source release available.
@@ -52,7 +81,7 @@ impl<'a> Downloader<'a> for FreeDictDownloader<'a> {
     async fn url(&self) -> anyhow::Result<String> {
         let entries = fetch_database().await?;
 
-        for entry in &entries {
+        for entry in entries {
             if entry.name.as_deref() == Some(self.language) {
                 if let Some(release) = entry
                     .releases

@@ -2,17 +2,26 @@ use indicatif::ProgressBar;
 use odict::{
     entryset,
     schema::{
-        Definition, DefinitionType, Dictionary, Entry, EntrySet, Etymology, ID, PartOfSpeech,
-        Pronunciation, PronunciationKind, Sense, SenseSet,
+        Definition, DefinitionType, Dictionary, Entry, EntrySet, Etymology, Example, ID, Note,
+        PartOfSpeech, Pronunciation, PronunciationKind, Sense, SenseSet, Translation,
     },
     senseset,
 };
 
 use crate::{frequency::FrequencyMap, processors::traits::Converter};
 
-use super::schema::tei::{Entry as FreeDictEntry, Sense as TEISense};
+use super::schema::tei::{Cit, Entry as FreeDictEntry, Sense as TEISense};
 
 pub struct FreeDictConverter {}
+
+/// A translation with optional annotations
+struct AnnotatedTranslation {
+    text: String,
+    labels: Vec<String>,
+    usage: Vec<String>,
+    pos: Option<String>,
+    gender: Option<String>,
+}
 
 impl FreeDictConverter {
     /// Parse part of speech from TEI format to ODICT format
@@ -38,16 +47,71 @@ impl FreeDictConverter {
         }
     }
 
+    /// Extract annotated translation from a citation element
+    fn extract_translation_from_cit(cit: &Cit) -> Option<AnnotatedTranslation> {
+        let text = cit
+            .quote
+            .first()
+            .map(|q| q.content.trim().to_string())
+            .filter(|s| !s.is_empty())?;
+
+        let labels: Vec<String> = cit
+            .lbl
+            .iter()
+            .map(|l| l.content.trim().to_string())
+            .collect();
+        let usage: Vec<String> = cit
+            .usg
+            .iter()
+            .map(|u| u.content.trim().to_string())
+            .collect();
+        let pos = cit.pos.first().map(|p| p.content.trim().to_string());
+        let gender = cit.gender.first().map(|g| g.content.trim().to_string());
+
+        Some(AnnotatedTranslation {
+            text,
+            labels,
+            usage,
+            pos,
+            gender,
+        })
+    }
+
+    /// Format an annotated translation as a string
+    fn format_translation(trans: &AnnotatedTranslation) -> String {
+        let mut result = trans.text.clone();
+
+        // Add grammatical info in parentheses if present
+        let mut annotations = Vec::new();
+        if let Some(ref pos) = trans.pos {
+            annotations.push(pos.clone());
+        }
+        if let Some(ref gender) = trans.gender {
+            annotations.push(gender.clone());
+        }
+        for label in &trans.labels {
+            annotations.push(label.clone());
+        }
+        for usage in &trans.usage {
+            annotations.push(usage.clone());
+        }
+
+        if !annotations.is_empty() {
+            result.push_str(" (");
+            result.push_str(&annotations.join(", "));
+            result.push(')');
+        }
+
+        result
+    }
+
     /// Extract translations from a TEI sense recursively.
     /// For bilingual dictionaries, translations (cit type="trans") are the actual definitions.
     fn collect_translations(sense: &TEISense, translations: &mut Vec<String>) {
         for cit in &sense.cit {
             if cit.cit_type.as_deref() == Some("trans") {
-                for quote in &cit.quote {
-                    let text = quote.content.trim();
-                    if !text.is_empty() {
-                        translations.push(text.to_string());
-                    }
+                if let Some(trans) = Self::extract_translation_from_cit(cit) {
+                    translations.push(Self::format_translation(&trans));
                 }
             }
         }
@@ -55,6 +119,69 @@ impl FreeDictConverter {
         for nested in &sense.sense {
             Self::collect_translations(nested, translations);
         }
+    }
+
+    /// Extract examples from a TEI sense.
+    /// Examples are cit type="example" with nested cit type="trans" for translations.
+    fn collect_examples(sense: &TEISense, target_lang: &str) -> Vec<Example> {
+        let mut examples = Vec::new();
+
+        for cit in &sense.cit {
+            if cit.cit_type.as_deref() == Some("example") {
+                // Get the example text from the quote
+                let example_text = cit
+                    .quote
+                    .first()
+                    .map(|q| q.content.trim().to_string())
+                    .filter(|s| !s.is_empty());
+
+                if let Some(text) = example_text {
+                    // Collect translations from nested cit elements
+                    let translations: Vec<Translation> = cit
+                        .cit
+                        .iter()
+                        .filter(|c| c.cit_type.as_deref() == Some("trans"))
+                        .filter_map(|c| Self::extract_translation_from_cit(c))
+                        .map(|t| Translation {
+                            lang: target_lang.to_string(),
+                            value: Self::format_translation(&t),
+                        })
+                        .collect();
+
+                    examples.push(Example {
+                        value: text,
+                        translations,
+                        pronunciations: vec![],
+                    });
+                }
+            }
+        }
+
+        // Recurse into nested senses
+        for nested in &sense.sense {
+            examples.extend(Self::collect_examples(nested, target_lang));
+        }
+
+        examples
+    }
+
+    /// Collect usage notes from a TEI sense
+    fn collect_notes(sense: &TEISense) -> Vec<Note> {
+        let mut notes = Vec::new();
+
+        // Collect usage notes from the sense level
+        for usg in &sense.usg {
+            let content = usg.content.trim();
+            if !content.is_empty() {
+                notes.push(Note {
+                    value: content.to_string(),
+                    id: None,
+                    examples: vec![],
+                });
+            }
+        }
+
+        notes
     }
 
     /// Extract pronunciations from entry forms
@@ -104,13 +231,13 @@ impl FreeDictConverter {
             .unwrap_or(PartOfSpeech::Un)
     }
 
-    /// Create a definition from a translation string
-    fn make_definition(value: String) -> DefinitionType {
+    /// Create a definition from a translation string with examples and notes
+    fn make_definition(value: String, examples: Vec<Example>, notes: Vec<Note>) -> DefinitionType {
         DefinitionType::Definition(Definition {
             id: None,
             value,
-            examples: vec![],
-            notes: vec![],
+            examples,
+            notes,
         })
     }
 
@@ -119,25 +246,34 @@ impl FreeDictConverter {
         sense_set: &mut SenseSet,
         pos: PartOfSpeech,
         translations: Vec<String>,
+        examples: Vec<Example>,
+        notes: Vec<Note>,
     ) {
         if translations.is_empty() {
             return;
         }
 
+        // Attach examples and notes to the first definition
+        let mut definitions: Vec<DefinitionType> = translations
+            .into_iter()
+            .enumerate()
+            .map(|(i, t)| {
+                if i == 0 {
+                    Self::make_definition(t, examples.clone(), notes.clone())
+                } else {
+                    Self::make_definition(t, vec![], vec![])
+                }
+            })
+            .collect();
+
         // Check if we already have a sense with this POS
         if let Some((idx, existing)) = sense_set.swap_remove_full(&pos) {
             // Merge definitions into existing sense
             let mut updated = existing.clone();
-            for t in translations {
-                updated.definitions.push(Self::make_definition(t));
-            }
+            updated.definitions.append(&mut definitions);
             sense_set.shift_insert(idx, updated);
         } else {
             // Create new sense
-            let definitions = translations
-                .into_iter()
-                .map(Self::make_definition)
-                .collect();
             sense_set.insert(Sense {
                 lemma: None,
                 tags: vec![],
@@ -150,11 +286,24 @@ impl FreeDictConverter {
     }
 
     /// Process TEI senses and add to SenseSet
-    fn process_senses(sense_set: &mut SenseSet, senses: &[TEISense], pos: PartOfSpeech) {
+    fn process_senses(
+        sense_set: &mut SenseSet,
+        senses: &[TEISense],
+        pos: PartOfSpeech,
+        target_lang: &str,
+    ) {
         for sense in senses {
             let mut translations = Vec::new();
             Self::collect_translations(sense, &mut translations);
-            Self::add_translations_to_senseset(sense_set, pos.clone(), translations);
+            let examples = Self::collect_examples(sense, target_lang);
+            let notes = Self::collect_notes(sense);
+            Self::add_translations_to_senseset(
+                sense_set,
+                pos.clone(),
+                translations,
+                examples,
+                notes,
+            );
         }
     }
 }
@@ -195,8 +344,17 @@ impl Converter for FreeDictConverter {
 
             let mut sense_set: SenseSet = senseset![];
 
+            // TODO: Extract target language from dictionary metadata
+            // For now, we use an empty string which means "unspecified"
+            let target_lang = "";
+
             // Process entry-level senses
-            Self::process_senses(&mut sense_set, &tei_entry.sense, default_pos.clone());
+            Self::process_senses(
+                &mut sense_set,
+                &tei_entry.sense,
+                default_pos.clone(),
+                target_lang,
+            );
 
             // Process homographs (hom elements) - these may have their own POS
             for hom in &tei_entry.hom {
@@ -206,7 +364,7 @@ impl Converter for FreeDictConverter {
                 } else {
                     hom_pos
                 };
-                Self::process_senses(&mut sense_set, &hom.sense, pos);
+                Self::process_senses(&mut sense_set, &hom.sense, pos, target_lang);
             }
 
             if sense_set.is_empty() {

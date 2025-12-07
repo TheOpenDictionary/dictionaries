@@ -36,14 +36,15 @@ impl Extractor for FreeDictExtractor {
         for file_result in archive.entries()? {
             let mut file = file_result.context("Failed to read tar entry")?;
             let path = file.path().context("Failed to get file path")?;
-            let path_str = path.to_string_lossy();
+            let path_str = path.to_string_lossy().to_string();
 
             if path_str.ends_with(".tei") {
                 let mut contents = String::new();
 
                 file.read_to_string(&mut contents)?;
 
-                let entries: TEI = from_str(&contents).context("Failed to parse TEI XML")?;
+                let entries: TEI = from_str(&contents)
+                    .context(format!("Failed to parse TEI XML for file: {}", path_str))?;
 
                 return Ok(Box::new(entries.text.body.entries.into_iter()));
             }

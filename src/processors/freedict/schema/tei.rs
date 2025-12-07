@@ -329,6 +329,18 @@ pub struct Cit {
 
     #[serde(default)]
     pub cit: Vec<Cit>,
+
+    #[serde(default)]
+    pub pos: Vec<Pos>,
+
+    #[serde(default, rename = "gen")]
+    pub gender: Vec<Gen>,
+
+    #[serde(default)]
+    pub lbl: Vec<Lbl>,
+
+    #[serde(default)]
+    pub usg: Vec<Usg>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

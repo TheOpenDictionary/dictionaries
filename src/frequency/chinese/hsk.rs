@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     frequency::utils::map_to_ranks_with_sort,
-    utils::{download_with_progress, hash_url, read_file, write_file},
+    utils::{DATA_DIR, download_with_progress, hash_url, read_file, write_file},
 };
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -20,7 +20,7 @@ async fn get_hsk_level_data(level: u8, progress: &ProgressBar) -> anyhow::Result
         level
     );
 
-    let file_path = PathBuf::from(".data").join(&hash_url(&url));
+    let file_path = PathBuf::from(DATA_DIR).join(&hash_url(&url));
 
     let content = match read_file(&file_path).await? {
         Some(content) => {
