@@ -156,8 +156,6 @@ pub trait Processor<'a> {
 
         join_all(tasks).await;
 
-        MULTI_PROGRESS.clear()?;
-
         Ok(())
     }
 }

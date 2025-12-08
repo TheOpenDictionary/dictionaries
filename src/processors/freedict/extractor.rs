@@ -44,7 +44,8 @@ impl Extractor for FreeDictExtractor {
                 file.read_to_string(&mut contents)?;
 
                 let entries: TEI = from_str(&contents)
-                    .context(format!("Failed to parse TEI XML for file: {}", path_str))?;
+                    .context(format!("Failed to parse TEI XML for file: {}", path_str))
+                    .unwrap();
 
                 return Ok(Box::new(entries.text.body.entries.into_iter()));
             }
