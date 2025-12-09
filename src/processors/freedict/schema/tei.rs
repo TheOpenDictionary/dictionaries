@@ -110,7 +110,7 @@ pub struct Pron {
     pub notation: Option<String>,
 
     #[serde(rename = "$value")]
-    pub content: String,
+    pub content: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

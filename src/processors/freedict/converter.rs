@@ -190,22 +190,21 @@ impl FreeDictConverter {
 
         for form in &entry.form {
             for pron in &form.pron {
-                let value = pron.content.trim();
-                if value.is_empty() {
-                    continue;
+                if let Some(v) = pron.content.clone() {
+                    let value = v.trim();
+
+                    let kind = if value.starts_with('/') || value.starts_with('[') {
+                        Some(PronunciationKind::IPA)
+                    } else {
+                        None
+                    };
+
+                    pronunciations.push(Pronunciation {
+                        value: value.to_string(),
+                        kind,
+                        media: vec![],
+                    });
                 }
-
-                let kind = if value.starts_with('/') || value.starts_with('[') {
-                    Some(PronunciationKind::IPA)
-                } else {
-                    None
-                };
-
-                pronunciations.push(Pronunciation {
-                    value: value.to_string(),
-                    kind,
-                    media: vec![],
-                });
             }
         }
 
