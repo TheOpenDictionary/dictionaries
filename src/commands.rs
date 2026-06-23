@@ -1,4 +1,4 @@
-use clap::{Subcommand, command};
+use clap::Subcommand;
 
 use crate::args::WiktionaryArgs;
 

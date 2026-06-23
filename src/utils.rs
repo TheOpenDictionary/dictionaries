@@ -93,7 +93,11 @@ pub async fn download_with_progress(
 pub fn hash_url(url: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(url.as_bytes());
-    format!("{:x}", hasher.finalize())
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 pub async fn read_file(path: &PathBuf) -> anyhow::Result<Option<Vec<u8>>> {
@@ -126,4 +130,17 @@ pub fn decompress_gzip(data: &[u8]) -> anyhow::Result<Vec<u8>> {
     let mut decompressed_data = Vec::new();
     decoder.read_to_end(&mut decompressed_data)?;
     Ok(decompressed_data)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::hash_url;
+
+    #[test]
+    fn hash_url_returns_lowercase_sha256_hex() {
+        assert_eq!(
+            hash_url(""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+    }
 }

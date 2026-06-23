@@ -3,3 +3,15 @@ includes = ["tasks.toml"]
 
 [tools]
 "cargo:cargo-edit" = "latest"
+rust = "latest"
+
+[tasks.check]
+run = "cargo clippy"
+
+[tasks.convert]
+usage = "arg \"dictionary\"\narg \"language\""
+run = 'cargo run --release -- "$usage_dictionary" "$usage_language"'
+
+[tasks."convert:debug"]
+usage = "arg \"dictionary\"\narg \"language\""
+run = 'cargo run -- "$usage_dictionary" "$usage_language"'
